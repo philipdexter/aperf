@@ -5,8 +5,11 @@ Synopsis:    ppx for loop perforation
 Authors:     Philip Dexter <philip.dexter@gmail.com>
 License:     MIT
 
+OCamlVersion: >= 4.02
+
 Executable ppperforate
-  Path:       lib
   BuildTools: ocamlbuild
+  BuildDepends: compiler-libs.common
+  Path:       lib
   MainIs:     ppperforate.ml
-  
+  CompiledObject: best
