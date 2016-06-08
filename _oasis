@@ -1,0 +1,12 @@
+OASISFormat: 0.4
+Name:        ppperforate
+Version:     0.1
+Synopsis:    ppx for loop perforation
+Authors:     Philip Dexter <philip.dexter@gmail.com>
+License:     MIT
+
+Executable ppperforate
+  Path:       lib
+  BuildTools: ocamlbuild
+  MainIs:     ppperforate.ml
+  
