@@ -4,12 +4,16 @@ Version:     0.1
 Synopsis:    ppx for loop perforation
 Authors:     Philip Dexter <philip.dexter@gmail.com>
 License:     MIT
+FilesAB:     META.ab
 
 OCamlVersion: >= 4.02
 
+PreInstallCommand: $ocamlfind install ppperforate META
+PreUninstallCommand: $ocamlfind remove ppperforate
+
 Executable ppperforate
   BuildTools: ocamlbuild
-  BuildDepends: compiler-libs.common
+  BuildDepends: compiler-libs.common, ppx_tools.metaquot
   Path:       lib
   MainIs:     ppperforate.ml
   CompiledObject: best

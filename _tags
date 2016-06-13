@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 16167fa83cd95c9108f241fcea0be15f)
+# DO NOT EDIT (digest: 2e3a53ea9ebff07571fb7df344ae5b84)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -16,5 +16,7 @@ true: annot, bin_annot
 "_darcs": not_hygienic
 # Executable ppperforate
 <lib/ppperforate.{native,byte}>: package(compiler-libs.common)
+<lib/ppperforate.{native,byte}>: package(ppx_tools.metaquot)
 <lib/*.ml{,i,y}>: package(compiler-libs.common)
+<lib/*.ml{,i,y}>: package(ppx_tools.metaquot)
 # OASIS_STOP
