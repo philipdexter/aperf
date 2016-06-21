@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 2e3a53ea9ebff07571fb7df344ae5b84)
+# DO NOT EDIT (digest: fe5f3b89410ed0dfb4a402b57004c47e)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -19,4 +19,9 @@ true: annot, bin_annot
 <lib/ppperforate.{native,byte}>: package(ppx_tools.metaquot)
 <lib/*.ml{,i,y}>: package(compiler-libs.common)
 <lib/*.ml{,i,y}>: package(ppx_tools.metaquot)
+# Executable aperf
+<aperf/aperf.{native,byte}>: package(compiler-libs.common)
+<aperf/aperf.{native,byte}>: package(unix)
+<aperf/*.ml{,i,y}>: package(compiler-libs.common)
+<aperf/*.ml{,i,y}>: package(unix)
 # OASIS_STOP

@@ -17,3 +17,10 @@ Executable ppperforate
   Path:       lib
   MainIs:     ppperforate.ml
   CompiledObject: best
+
+Executable aperf
+  BuildTools: ocamlbuild
+  BuildDepends: compiler-libs.common, unix
+  Path: aperf
+  MainIs: aperf.ml
+  CompiledObject: best
