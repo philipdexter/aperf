@@ -29,7 +29,7 @@ let rec exp_mapper e =
         let payload' =
           match payload with
           | PStr strs -> PStr (List.map structure_mapper strs)
-          | _ -> assert false in
+          | _ -> failwith "payload not PStr" in
         Pexp_extension (loc, payload')
       end
     | x -> x in
@@ -83,11 +83,11 @@ let rec active_exp_mapper ?extra_attrs e =
           let old_start =
             match start with
             | { pexp_desc = Pexp_constant (Pconst_integer (i,_)) } -> int_of_string i
-            | _ -> assert false in
+            | _ -> failwith "start not an integer constant" in
           let old_bound =
             match bound with
             | { pexp_desc = Pexp_constant (Pconst_integer (i,_)) } -> int_of_string i
-            | _ -> assert false in
+            | _ -> failwith "bound not an integer constant" in
           let (pexp_attributes, perforation) =
             match perforate_property attributes with
             | (attributes, sn) -> (attributes, match sn with Some n -> n | None -> (old_bound - old_start) / 2) in
@@ -105,7 +105,7 @@ let rec active_exp_mapper ?extra_attrs e =
         let payload' =
           match payload with
           | PStr strs -> PStr (List.map (fun str -> (active_structure_mapper ~extra_attrs:(attributes @ bonus_attribute)) str) strs)
-          | _ -> assert false in
+          | _ -> failwith "payload not PStr" in
         if perforating then
           begin
             let expressions = match payload' with
@@ -113,10 +113,10 @@ let rec active_exp_mapper ?extra_attrs e =
                 strs |> List.map (fun str ->
                   match str.pstr_desc with
                   | Pstr_eval (e, _) -> e
-                  | _ -> assert false)
-              | _ -> assert false in
+                  | _ -> failwith "payload structure not Pstr_eval")
+              | _ -> failwith "payload not PStr" in
             let rec loop = function
-              | [] -> Printast.expression 0 Format.std_formatter e ; assert false
+              | [] -> Printast.expression 0 Format.std_formatter e ; failwith "empty expression"
               | x :: xs -> { pexp_desc = Pexp_sequence (x, if xs = [] then { pexp_desc = Pexp_construct ({ txt = Longident.Lident "()" ; loc = Location.none }, None) ; pexp_loc = x.pexp_loc ; pexp_attributes = []} else (loop xs))
                            ; pexp_loc = x.pexp_loc
                            ; pexp_attributes = x.pexp_attributes } in
