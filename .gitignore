@@ -1,0 +1,10 @@
+perf*.ml
+
+a.out
+*.native
+*.out
+
+_build/
+META
+setup.data
+setup.log
