@@ -78,21 +78,29 @@ let rec active_exp_mapper ?extra_attrs e =
   let pexp_desc =
     match e.pexp_desc with
     | Pexp_for (p, start, bound, dir, body) ->
-      if List.exists (fun (a,_) -> String.equal "perforate" a.txt) attributes then
+      let perforating = List.exists (fun (a,_) -> String.equal "perforate" a.txt) attributes in
+      if perforating then
         begin
-          let old_start =
-            match start with
-            | { pexp_desc = Pexp_constant (Pconst_integer (i,_)) } -> int_of_string i
-            | _ -> failwith "start not an integer constant" in
-          let old_bound =
-            match bound with
-            | { pexp_desc = Pexp_constant (Pconst_integer (i,_)) } -> int_of_string i
-            | _ -> failwith "bound not an integer constant" in
-          let (pexp_attributes, perforation) =
-            match perforate_property attributes with
-            | (attributes, sn) -> (attributes, match sn with Some n -> n | None -> (old_bound - old_start) / 2) in
-          Pexp_for (p, { start with pexp_desc = Pexp_constant (Pconst_integer (string_of_int 0, None)) },
-                    { bound with pexp_desc = Pexp_constant (Pconst_integer (string_of_int perforation, None)) }, dir, body)
+          let res = if List.hd !active_config then
+              begin
+                let old_start =
+                  match start with
+                  | { pexp_desc = Pexp_constant (Pconst_integer (i,_)) } -> int_of_string i
+                  | _ -> failwith "start not an integer constant" in
+                let old_bound =
+                  match bound with
+                  | { pexp_desc = Pexp_constant (Pconst_integer (i,_)) } -> int_of_string i
+                  | _ -> failwith "bound not an integer constant" in
+                let (pexp_attributes, perforation) =
+                  match perforate_property attributes with
+                  | (attributes, sn) -> (attributes, match sn with Some n -> n | None -> (old_bound - old_start) / 2) in
+                Pexp_for (p, { start with pexp_desc = Pexp_constant (Pconst_integer (string_of_int 0, None)) },
+                          { bound with pexp_desc = Pexp_constant (Pconst_integer (string_of_int perforation, None)) }, dir, body)
+              end
+            else
+              Pexp_for (p, start, bound, dir, body) in
+          active_config := List.tl !active_config ;
+          res
         end
       else
         Pexp_for (p, start, bound, dir, body)
@@ -141,39 +149,45 @@ and active_structure_mapper ?extra_attrs si =
 
 let try_perforation ast =
   let open Unix in
-  active_config := [true, false, false, false, false] ;
-  let ast' = List.map active_structure_mapper ast in
-  (* Pprintast.structure Format.std_formatter ast' ; *)
-  let fout = Filename.temp_file ~temp_dir:"./" "perf" ".ml" in
-  let fn = open_out fout in
-  Printf.fprintf fn "%s\n" (Pprintast.string_of_structure ast') ;
-  close_out fn ;
-  let (pr0, pw0) = Unix.pipe () in
-  let (pr1, pw1) = Unix.pipe () in
-  let (pr2, pw2) = Unix.pipe () in
-  let pid = Unix.create_process "ocaml" [| "ocaml"; fout |] pr0 pw1 pw2 in
-  Unix.close pw0 ;
-  Unix.close pw1 ;
-  Unix.close pw2 ;
-  let echo_out = Unix.in_channel_of_descr pr1 in
-  let echo_stderr = Unix.in_channel_of_descr pr2 in
-  let lines = ref [] in
-  (try
-     while true do
-       print_endline (input_line echo_out) ;
-     done
-   with
-     End_of_file -> close_in echo_out) ;
-  List.iter print_endline !lines ;
-  let lines = ref [] in
-  (try
-     while true do
-       print_endline (input_line echo_stderr) ;
-     done
-   with
-     End_of_file -> close_in echo_stderr) ;
-  List.iter print_endline !lines ;
-  Unix.kill pid 15
+  let rec replicate i e = if i == 0 then [] else e :: replicate (i-1) e in
+  let rec count_to i = let rec loop k = if k > i then [] else k :: loop (k+1) in loop 0 in
+  let basic_configs len = List.map (fun i -> replicate i false @ [true] @ replicate (len-1-i) false) (count_to (len-1)) in
+  basic_configs 4 |> List.iter (fun config ->
+      active_config := config ;
+      print_endline "running" ;
+      List.iter (Printf.printf "%b - ") !active_config ;
+      print_endline "\n----" ;
+      let ast' = List.map active_structure_mapper ast in
+      (* Pprintast.structure Format.std_formatter ast' ; *)
+      let fout = Filename.temp_file ~temp_dir:"./" "perf" ".ml" in
+      let fn = open_out fout in
+      Printf.fprintf fn "%s\n" (Pprintast.string_of_structure ast') ;
+      close_out fn ;
+      let (pr0, pw0) = Unix.pipe () in
+      let (pr1, pw1) = Unix.pipe () in
+      let (pr2, pw2) = Unix.pipe () in
+      let _pid = Unix.create_process "ocaml" [| "ocaml"; fout |] pr0 pw1 pw2 in
+      Unix.close pw0 ;
+      Unix.close pw1 ;
+      Unix.close pw2 ;
+      let echo_out = Unix.in_channel_of_descr pr1 in
+      let echo_stderr = Unix.in_channel_of_descr pr2 in
+      let lines = ref [] in
+      (try
+         while true do
+           print_endline (input_line echo_out) ;
+         done
+       with
+         End_of_file -> close_in echo_out) ;
+      List.iter print_endline !lines ;
+      let lines = ref [] in
+      (try
+         while true do
+           print_endline (input_line echo_stderr) ;
+         done
+       with
+         End_of_file -> close_in echo_stderr) ;
+      List.iter print_endline !lines)
 
 let () =
   Arg.parse args anon_arg usage_msg ;
