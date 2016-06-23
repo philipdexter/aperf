@@ -19,9 +19,14 @@ let rec exp_mapper e =
   let open Parsetree in
   let open Location in
   let open Lexing in
+  let attributes = e.pexp_attributes in
   let pexp_desc =
     match e.pexp_desc with
-    | Pexp_for (p, start, bound, dir, body) as x -> for_loops := ("hi" ^ (string_of_int e.pexp_loc.loc_start.pos_lnum)) :: !for_loops ; x
+    | Pexp_for (p, start, bound, dir, body) as x ->
+      let perforating = List.exists (fun (a,_) -> String.equal "perforate" a.txt) attributes in
+      if perforating then
+        for_loops := ("hi" ^ (string_of_int e.pexp_loc.loc_start.pos_lnum)) :: !for_loops ;
+      x
     | Pexp_let (rflag, vbs, e) -> Pexp_let (rflag, vbs, exp_mapper e)
     | Pexp_sequence (e1, e2) -> Pexp_sequence (exp_mapper e1, exp_mapper e2)
     | Pexp_extension (loc, payload) ->
