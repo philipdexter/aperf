@@ -124,7 +124,7 @@ let try_perforation ast =
   let rec replicate i e = if i == 0 then [] else e :: replicate (i-1) e in
   let rec count_to i = let rec loop k = if k > i then [] else k :: loop (k+1) in loop 0 in
   let basic_configs len = List.map (fun i -> replicate i false @ [true] @ replicate (len-1-i) false) (count_to (len-1)) in
-  basic_configs 4 |> List.iter (fun config ->
+  basic_configs (List.length !for_loops) |> List.iter (fun config ->
       active_config := config ;
       print_endline "running" ;
       List.iter (Printf.printf "%b - ") !active_config ;
