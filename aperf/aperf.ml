@@ -15,41 +15,34 @@ let usage_msg =
     "Usage: %s\n"
     Sys.argv.(0)
 
-let rec exp_mapper e =
+let exp_mapper mapper e =
   let open Parsetree in
   let open Location in
   let open Lexing in
-  let attributes = e.pexp_attributes in
-  let pexp_desc =
-    match e.pexp_desc with
-    | Pexp_for (p, start, bound, dir, body) as x ->
-      let perforating = List.exists (fun (a,_) -> String.equal "perforate" a.txt) attributes in
-      if perforating then
-        for_loops := ("hi" ^ (string_of_int e.pexp_loc.loc_start.pos_lnum)) :: !for_loops ;
-      x
-    | Pexp_let (rflag, vbs, e) -> Pexp_let (rflag, vbs, exp_mapper e)
-    | Pexp_sequence (e1, e2) -> Pexp_sequence (exp_mapper e1, exp_mapper e2)
-    | Pexp_extension (loc, payload) ->
-      begin
-        let payload' =
-          match payload with
-          | PStr strs -> PStr (List.map structure_mapper strs)
-          | _ -> failwith "payload not PStr" in
-        Pexp_extension (loc, payload')
-      end
-    | x -> x in
-  { e with pexp_desc }
+  let open Ast_mapper in
+  match e.pexp_desc with
+  | Pexp_for (p, start, bound, dir, body) ->
+    for_loops := ("hi" ^ (string_of_int e.pexp_loc.loc_start.pos_lnum)) :: !for_loops ;
+    e
+  | x -> default_mapper.expr mapper e
 
-and structure_mapper si =
+let search_mapper =
   let open Parsetree in
+  let open Ast_mapper in
   let open Location in
-  let open Lexing in
-  let pstr_desc =
-    match si.pstr_desc with
-    | Pstr_value (rflag, vbs) -> Pstr_value (rflag, List.map (fun vb -> { vb with pvb_expr = exp_mapper vb.pvb_expr }) vbs)
-    | Pstr_eval (exp, attr) -> Pstr_eval (exp_mapper exp, attr)
-    | x -> x in
-  { si with pstr_desc }
+  { default_mapper with
+    expr = (fun mapper expr ->
+        match expr with
+        | { pexp_desc = Pexp_extension ({ txt = "perforate" } as loc, PStr [{pstr_desc = Pstr_eval (e,attributes)} as struc])} ->
+          { expr with
+            pexp_desc = Pexp_extension (loc,
+                                        PStr [{ struc with
+                                                pstr_desc = Pstr_eval (exp_mapper mapper e, attributes) }]) }
+        | { pexp_attributes = attr} ->
+          if List.exists (fun (a,_) -> String.equal "perforate" a.txt) attr then
+            exp_mapper mapper expr
+          else
+            default_mapper.expr mapper expr) }
 
 let active_config = ref []
 
@@ -75,82 +68,56 @@ let perforate_property attributes =
                                      (attrs'', r) -> ((loc,payload) :: attrs'', r) in
   loop attributes
 
-let rec active_exp_mapper ?extra_attrs e =
+let active_exp_mapper mapper e =
   let open Parsetree in
   let open Location in
   let open Lexing in
-  let attributes = e.pexp_attributes @ (match extra_attrs with Some attrs -> attrs | None -> []) in
-  let pexp_desc =
-    match e.pexp_desc with
-    | Pexp_for (p, start, bound, dir, body) ->
-      let perforating = List.exists (fun (a,_) -> String.equal "perforate" a.txt) attributes in
-      if perforating then
-        begin
-          let res = if List.hd !active_config then
-              begin
-                let old_start =
-                  match start with
-                  | { pexp_desc = Pexp_constant (Pconst_integer (i,_)) } -> int_of_string i
-                  | _ -> failwith "start not an integer constant" in
-                let old_bound =
-                  match bound with
-                  | { pexp_desc = Pexp_constant (Pconst_integer (i,_)) } -> int_of_string i
-                  | _ -> failwith "bound not an integer constant" in
-                let (pexp_attributes, perforation) =
-                  match perforate_property attributes with
-                  | (attributes, sn) -> (attributes, match sn with Some n -> n | None -> (old_bound - old_start) / 2) in
-                Pexp_for (p, { start with pexp_desc = Pexp_constant (Pconst_integer (string_of_int 0, None)) },
-                          { bound with pexp_desc = Pexp_constant (Pconst_integer (string_of_int perforation, None)) }, dir, body)
-              end
-            else
-              Pexp_for (p, start, bound, dir, body) in
-          active_config := List.tl !active_config ;
-          res
-        end
-      else
-        Pexp_for (p, start, bound, dir, body)
-    | Pexp_let (rflag, vbs, e) -> Pexp_let (rflag, vbs, active_exp_mapper e)
-    | Pexp_sequence (e1, e2) -> Pexp_sequence (active_exp_mapper e1, active_exp_mapper e2)
-    | Pexp_extension (loc, payload) ->
+  let open Ast_helper in
+  let open Ast_mapper in
+  let attributes = e.pexp_attributes in
+  match e.pexp_desc with
+  | Pexp_for (p, start, bound, dir, body) ->
+    let do_perforation = List.hd !active_config in
+    active_config := List.tl !active_config ;
+    if do_perforation then
       begin
-        let perforating = String.equal "perforate" loc.txt in
-        let bonus_attribute = if perforating then [loc, PStr []] else [] in
-        let payload' =
-          match payload with
-          | PStr strs -> PStr (List.map (fun str -> (active_structure_mapper ~extra_attrs:(attributes @ bonus_attribute)) str) strs)
-          | _ -> failwith "payload not PStr" in
-        if perforating then
-          begin
-            let expressions = match payload' with
-              | PStr strs ->
-                strs |> List.map (fun str ->
-                  match str.pstr_desc with
-                  | Pstr_eval (e, _) -> e
-                  | _ -> failwith "payload structure not Pstr_eval")
-              | _ -> failwith "payload not PStr" in
-            let rec loop = function
-              | [] -> Printast.expression 0 Format.std_formatter e ; failwith "empty expression"
-              | x :: xs -> { pexp_desc = Pexp_sequence (x, if xs = [] then { pexp_desc = Pexp_construct ({ txt = Longident.Lident "()" ; loc = Location.none }, None) ; pexp_loc = x.pexp_loc ; pexp_attributes = []} else (loop xs))
-                           ; pexp_loc = x.pexp_loc
-                           ; pexp_attributes = x.pexp_attributes } in
-            (loop expressions).pexp_desc
-          end
-        else
-          Pexp_extension (loc, payload')
+        let old_start =
+          match start with
+          | { pexp_desc = Pexp_constant (Pconst_integer (i,_)) } -> int_of_string i
+          | _ -> failwith "start not an integer constant" in
+        let old_bound =
+          match bound with
+          | { pexp_desc = Pexp_constant (Pconst_integer (i,_)) } -> int_of_string i
+          | _ -> failwith "bound not an integer constant" in
+        let (pexp_attributes, perforation) =
+          match perforate_property attributes with
+          | (attributes, sn) -> (attributes, match sn with Some n -> n | None -> (old_bound - old_start) / 2) in
+        let bound_alter = Pexp_apply ({ pexp_desc = Pexp_ident { txt = Longident.Lident "*" ; loc = !default_loc } ; pexp_loc = !default_loc ; pexp_attributes = [] }, []) in
+        mapper.expr mapper @@
+        { (Exp.for_ p
+             { start with pexp_desc = Pexp_constant (Pconst_integer (string_of_int 0, None)) }
+             { bound with pexp_desc = Pexp_constant (Pconst_integer (string_of_int perforation, None)) }
+             dir
+             body)
+          with pexp_attributes }
       end
-    | x -> x in
-  { e with pexp_desc }
+    else
+      default_mapper.expr mapper e
+  | x -> default_mapper.expr mapper e
 
-and active_structure_mapper ?extra_attrs si =
+let active_mapper =
   let open Parsetree in
+  let open Ast_mapper in
   let open Location in
-  let open Lexing in
-  let pstr_desc =
-    match si.pstr_desc with
-    | Pstr_value (rflag, vbs) -> Pstr_value (rflag, List.map (fun vb -> { vb with pvb_expr = active_exp_mapper ?extra_attrs vb.pvb_expr }) vbs)
-    | Pstr_eval (exp, attr) -> Pstr_eval (active_exp_mapper ?extra_attrs exp, attr)
-    | x -> x in
-  { si with pstr_desc }
+  { default_mapper with
+    expr = (fun mapper expr ->
+        match expr with
+        | { pexp_desc = Pexp_extension ({ txt = "perforate" }, PStr [{pstr_desc = Pstr_eval (e,attributes)}])} -> active_exp_mapper mapper e
+        | { pexp_attributes = attr} ->
+          if List.exists (fun (a,_) -> String.equal "perforate" a.txt) attr then
+            active_exp_mapper mapper expr
+          else
+            default_mapper.expr mapper expr) }
 
 let try_perforation ast =
   let open Unix in
@@ -162,7 +129,9 @@ let try_perforation ast =
       print_endline "running" ;
       List.iter (Printf.printf "%b - ") !active_config ;
       print_endline "\n----" ;
-      let ast' = List.map active_structure_mapper ast in
+      let ast' =
+        let open Ast_mapper in
+        active_mapper.structure active_mapper ast in
       (* Pprintast.structure Format.std_formatter ast' ; *)
       let fout = Filename.temp_file ~temp_dir:"./" "perf" ".ml" in
       let fn = open_out fout in
@@ -204,8 +173,11 @@ let () =
        let fmt = Format.std_formatter in
        let lexer = Lexing.from_channel (open_in source) in
        let pstr = Parse.implementation lexer in
+
        (* Printast.implementation fmt pstr ; *)
-       let pstr' = List.map structure_mapper pstr in
+
+       let open Ast_mapper in
+       let pstr' = search_mapper.structure search_mapper pstr in
 
        Printf.printf "aperf: Found %d for loops for perforation\n" (List.length !for_loops) ;
 
