@@ -81,22 +81,16 @@ let active_exp_mapper mapper e =
     active_config := List.tl !active_config ;
     if do_perforation then
       begin
-        let old_start =
-          match start with
-          | { pexp_desc = Pexp_constant (Pconst_integer (i,_)) } -> int_of_string i
-          | _ -> failwith "start not an integer constant" in
-        let old_bound =
-          match bound with
-          | { pexp_desc = Pexp_constant (Pconst_integer (i,_)) } -> int_of_string i
-          | _ -> failwith "bound not an integer constant" in
-        let (pexp_attributes, perforation) =
-          match perforate_property attributes with
-          | (attributes, sn) -> (attributes, match sn with Some n -> n | None -> (old_bound - old_start) / 2) in
-        let bound_alter = Pexp_apply ({ pexp_desc = Pexp_ident { txt = Longident.Lident "*" ; loc = !default_loc } ; pexp_loc = !default_loc ; pexp_attributes = [] }, []) in
-        mapper.expr mapper @@
+        let (pexp_attributes, perforation) = perforate_property attributes in
+        let this_of_that_of_expr this that expr = Exp.apply (Exp.ident { txt = Longident.Lident (this^"_of_"^that) ; loc = !default_loc }) [(Asttypes.Nolabel,expr)] in
+        let float_of_int_of_expr = this_of_that_of_expr "float" "int" in
+        let int_of_float_of_expr = this_of_that_of_expr "int" "float" in
+        let new_bound = int_of_float_of_expr @@ Exp.apply (Exp.ident { txt = Longident.Lident "*." ; loc = !default_loc })
+            [Asttypes.Nolabel,float_of_int_of_expr bound ; Asttypes.Nolabel,Exp.constant (Const.float "0.8") ] in
+        mapper.expr mapper
         { (Exp.for_ p
              { start with pexp_desc = Pexp_constant (Pconst_integer (string_of_int 0, None)) }
-             { bound with pexp_desc = Pexp_constant (Pconst_integer (string_of_int perforation, None)) }
+             new_bound
              dir
              body)
           with pexp_attributes }
