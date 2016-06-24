@@ -134,6 +134,9 @@ let try_perforation ast =
       let (pr0, pw0) = Unix.pipe () in
       let (pr1, pw1) = Unix.pipe () in
       let (pr2, pw2) = Unix.pipe () in
+
+      let start_time = Unix.gettimeofday () in
+
       let _pid = Unix.create_process "ocaml" [| "ocaml"; fout |] pr0 pw1 pw2 in
       Unix.close pw0 ;
       Unix.close pw1 ;
@@ -155,7 +158,10 @@ let try_perforation ast =
          done
        with
          End_of_file -> close_in echo_stderr) ;
-      List.iter print_endline !lines)
+      List.iter print_endline !lines ;
+
+      Printf.printf "elapsed time: %f sec\n" (Unix.gettimeofday () -. start_time)
+    )
 
 let () =
   Arg.parse args anon_arg usage_msg ;
