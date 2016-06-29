@@ -139,63 +139,38 @@ let try_perforation ast =
       close_out fn ;
 
 
+      let run_and_print command args =
+        let (pr0, pw0) = Unix.pipe () in
+        let (pr1, pw1) = Unix.pipe () in
+        let (pr2, pw2) = Unix.pipe () in
+        let _pid = Unix.create_process command (Array.append [| command |] args) pr0 pw1 pw2 in
+        Unix.close pw0 ;
+        Unix.close pw1 ;
+        Unix.close pw2 ;
+        let echo_out = Unix.in_channel_of_descr pr1 in
+        let echo_stderr = Unix.in_channel_of_descr pr2 in
+        (try
+           while true do
+             print_endline (input_line echo_out) ;
+           done
+         with
+           End_of_file -> close_in echo_out) ;
+        (try
+           while true do
+             print_endline (input_line echo_stderr) ;
+           done
+         with
+           End_of_file -> close_in echo_stderr) ;
+
+        ignore @@ Unix.waitpid [] _pid in
+
 
       print_endline "building..." ;
-
-      let (pr0, pw0) = Unix.pipe () in
-      let (pr1, pw1) = Unix.pipe () in
-      let (pr2, pw2) = Unix.pipe () in
-
-      let _pid = Unix.create_process "ocamlopt" [| "ocamlopt" ; fout ; "-o" ; fout_native |] pr0 pw1 pw2 in
-      Unix.close pw0 ;
-      Unix.close pw1 ;
-      Unix.close pw2 ;
-      let echo_out = Unix.in_channel_of_descr pr1 in
-      let echo_stderr = Unix.in_channel_of_descr pr2 in
-      (try
-         while true do
-           print_endline (input_line echo_out) ;
-         done
-       with
-         End_of_file -> close_in echo_out) ;
-      (try
-         while true do
-           print_endline (input_line echo_stderr) ;
-         done
-       with
-         End_of_file -> close_in echo_stderr) ;
-
-      ignore @@ Unix.waitpid [] _pid ;
-
-      let start_time = Unix.gettimeofday () in
+      run_and_print "ocamlopt" [| fout ; "-o" ; fout_native |] ;
 
       print_endline "running..." ;
-
-      let (pr0, pw0) = Unix.pipe () in
-      let (pr1, pw1) = Unix.pipe () in
-      let (pr2, pw2) = Unix.pipe () in
-
-      let _pid = Unix.create_process fout_native [| fout_native |] pr0 pw1 pw2 in
-      Unix.close pw0 ;
-      Unix.close pw1 ;
-      Unix.close pw2 ;
-      let echo_out = Unix.in_channel_of_descr pr1 in
-      let echo_stderr = Unix.in_channel_of_descr pr2 in
-      (try
-         while true do
-           print_endline (input_line echo_out) ;
-         done
-       with
-         End_of_file -> close_in echo_out) ;
-      (try
-         while true do
-           print_endline (input_line echo_stderr) ;
-         done
-       with
-         End_of_file -> close_in echo_stderr) ;
-
-      ignore @@ Unix.waitpid [] _pid ;
-
+      let start_time = Unix.gettimeofday () in
+      run_and_print fout_native [||] ;
       Printf.printf "elapsed time: %f sec\n" (Unix.gettimeofday () -. start_time)
     )
 
