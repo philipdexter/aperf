@@ -65,7 +65,6 @@ let perforate_property attributes =
 let active_exp_mapper mapper e =
   let open Parsetree in
   let open Location in
-  let open Lexing in
   let open Ast_helper in
   let open Ast_mapper in
   let attributes = e.pexp_attributes in
@@ -113,7 +112,6 @@ let active_mapper =
             default_mapper.expr mapper expr) }
 
 let try_perforation ast =
-  let open Unix in
   let rec replicate i e = if i == 0 then [] else e :: replicate (i-1) e in
   let rec count_to i = let rec loop k = if k > i then [] else k :: loop (k+1) in loop 0 in
   let basic_configs len = [replicate len false] @ List.map (fun i -> replicate i false @ [true] @ replicate (len-1-i) false) (count_to (len-1)) in
