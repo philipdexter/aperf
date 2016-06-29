@@ -132,38 +132,69 @@ let try_perforation ast =
         let open Ast_mapper in
         active_mapper.structure active_mapper ast in
       (* Pprintast.structure Format.std_formatter ast' ; *)
-      let fout = Filename.temp_file ~temp_dir:"./" "perf" ".ml" in
+      let fout = Filename.temp_file ~temp_dir:"./tmp/" "perf" ".ml" in
+      let fout_native = String.sub fout 0 (String.length fout - 3) ^ ".native" in
       let fn = open_out fout in
       Printf.fprintf fn "%s\n" (Pprintast.string_of_structure ast') ;
       close_out fn ;
+
+
+
+      print_endline "building..." ;
+
       let (pr0, pw0) = Unix.pipe () in
       let (pr1, pw1) = Unix.pipe () in
       let (pr2, pw2) = Unix.pipe () in
 
-      let start_time = Unix.gettimeofday () in
-
-      let _pid = Unix.create_process "ocaml" [| "ocaml"; fout |] pr0 pw1 pw2 in
+      let _pid = Unix.create_process "ocamlopt" [| "ocamlopt" ; fout ; "-o" ; fout_native |] pr0 pw1 pw2 in
       Unix.close pw0 ;
       Unix.close pw1 ;
       Unix.close pw2 ;
       let echo_out = Unix.in_channel_of_descr pr1 in
       let echo_stderr = Unix.in_channel_of_descr pr2 in
-      let lines = ref [] in
       (try
          while true do
            print_endline (input_line echo_out) ;
          done
        with
          End_of_file -> close_in echo_out) ;
-      List.iter print_endline !lines ;
-      let lines = ref [] in
       (try
          while true do
            print_endline (input_line echo_stderr) ;
          done
        with
          End_of_file -> close_in echo_stderr) ;
-      List.iter print_endline !lines ;
+
+      ignore @@ Unix.waitpid [] _pid ;
+
+      let start_time = Unix.gettimeofday () in
+
+      print_endline "running..." ;
+
+      let (pr0, pw0) = Unix.pipe () in
+      let (pr1, pw1) = Unix.pipe () in
+      let (pr2, pw2) = Unix.pipe () in
+
+      let _pid = Unix.create_process fout_native [| fout_native |] pr0 pw1 pw2 in
+      Unix.close pw0 ;
+      Unix.close pw1 ;
+      Unix.close pw2 ;
+      let echo_out = Unix.in_channel_of_descr pr1 in
+      let echo_stderr = Unix.in_channel_of_descr pr2 in
+      (try
+         while true do
+           print_endline (input_line echo_out) ;
+         done
+       with
+         End_of_file -> close_in echo_out) ;
+      (try
+         while true do
+           print_endline (input_line echo_stderr) ;
+         done
+       with
+         End_of_file -> close_in echo_stderr) ;
+
+      ignore @@ Unix.waitpid [] _pid ;
 
       Printf.printf "elapsed time: %f sec\n" (Unix.gettimeofday () -. start_time)
     )
