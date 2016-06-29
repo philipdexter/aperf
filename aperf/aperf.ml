@@ -86,12 +86,16 @@ let active_exp_mapper mapper e =
         let this_of_that_of_expr this that expr = Exp.apply (Exp.ident { txt = Longident.Lident (this^"_of_"^that) ; loc = !default_loc }) [(Asttypes.Nolabel,expr)] in
         let float_of_int_of_expr = this_of_that_of_expr "float" "int" in
         let int_of_float_of_expr = this_of_that_of_expr "int" "float" in
-        let new_bound = int_of_float_of_expr @@ Exp.apply (Exp.ident { txt = Longident.Lident "*." ; loc = !default_loc })
-            [Asttypes.Nolabel,float_of_int_of_expr bound ; Asttypes.Nolabel,Exp.constant (Const.float (string_of_float perforation)) ] in
+        let bound_minus_start = Exp.apply (Exp.ident { txt = Longident.Lident "-" ; loc = !default_loc })
+            [Asttypes.Nolabel, bound ; Asttypes.Nolabel, start] in
+        let new_relative_bound = int_of_float_of_expr @@ Exp.apply (Exp.ident { txt = Longident.Lident "*." ; loc = !default_loc })
+            [Asttypes.Nolabel,float_of_int_of_expr  bound_minus_start ; Asttypes.Nolabel,Exp.constant (Const.float (string_of_float perforation)) ] in
+        let new_absolute_bound = Exp.apply (Exp.ident { txt = Longident.Lident "+" ; loc = !default_loc })
+            [Asttypes.Nolabel, start ; Asttypes.Nolabel, new_relative_bound] in
         mapper.expr mapper
         { (Exp.for_ p
              { start with pexp_desc = Pexp_constant (Pconst_integer (string_of_int 0, None)) }
-             new_bound
+             new_absolute_bound
              dir
              body)
           with pexp_attributes }
