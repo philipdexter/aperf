@@ -1,4 +1,4 @@
-perf*.ml
+tmp/
 
 a.out
 *.native

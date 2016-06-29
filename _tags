@@ -25,3 +25,4 @@ true: annot, bin_annot
 <aperf/*.ml{,i,y}>: package(compiler-libs.common)
 <aperf/*.ml{,i,y}>: package(unix)
 # OASIS_STOP
+<tmp>: -traverse
