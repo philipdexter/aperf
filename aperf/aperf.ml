@@ -1,14 +1,8 @@
 let for_loops = ref []
 
-let args =
-  let open Arg in
-  align []
-
 let input_files = ref []
 
-let anon_arg name =
-  if Filename.check_suffix name ".ml" then
-    input_files := name :: !input_files
+let eval_file = ref None
 
 let usage_msg =
   Printf.sprintf
@@ -125,9 +119,7 @@ let try_perforation ast =
   let basic_configs len = [replicate len false] @ List.map (fun i -> replicate i false @ [true] @ replicate (len-1-i) false) (count_to (len-1)) in
   basic_configs (List.length !for_loops) |> List.iter (fun config ->
       active_config := config ;
-      print_endline "running" ;
-      List.iter (Printf.printf "%b - ") !active_config ;
-      print_endline "\n----" ;
+      Printf.printf ">>>>\n> running with config:\n> %s\n" (String.concat "-" (List.map string_of_bool !active_config)) ;
       let ast' =
         let open Ast_mapper in
         active_mapper.structure active_mapper ast in
@@ -138,8 +130,7 @@ let try_perforation ast =
       Printf.fprintf fn "%s\n" (Pprintast.string_of_structure ast') ;
       close_out fn ;
 
-
-      let run_and_print command args =
+      let run command args =
         let (pr0, pw0) = Unix.pipe () in
         let (pr1, pw1) = Unix.pipe () in
         let (pr2, pw2) = Unix.pipe () in
@@ -149,30 +140,69 @@ let try_perforation ast =
         Unix.close pw2 ;
         let echo_out = Unix.in_channel_of_descr pr1 in
         let echo_stderr = Unix.in_channel_of_descr pr2 in
+        let stdout_lines = ref [] in
         (try
            while true do
-             print_endline (input_line echo_out) ;
+             stdout_lines := input_line echo_out :: !stdout_lines
            done
          with
            End_of_file -> close_in echo_out) ;
+        let stderr_lines = ref [] in
         (try
            while true do
-             print_endline (input_line echo_stderr) ;
+             stderr_lines := input_line echo_stderr :: !stderr_lines
            done
          with
            End_of_file -> close_in echo_stderr) ;
 
-        ignore @@ Unix.waitpid [] _pid in
+        ignore @@ Unix.waitpid [] _pid ;
+
+        !stdout_lines, !stderr_lines in
 
 
-      print_endline "building..." ;
-      run_and_print "ocamlopt" [| fout ; "-o" ; fout_native |] ;
+      let print_both (a, b) =
+        print_endline "> stdout" ;
+        List.iter print_endline a ;
+        print_endline "> stderr" ;
+        List.iter print_endline b in
 
-      print_endline "running..." ;
+      print_endline "> building..." ;
+      print_both @@ run "ocamlopt" [| fout ; "-o" ; fout_native |] ;
+
+      print_endline "> running..." ;
       let start_time = Unix.gettimeofday () in
-      run_and_print fout_native [||] ;
-      Printf.printf "elapsed time: %f sec\n" (Unix.gettimeofday () -. start_time)
+      print_both @@ run fout_native [||] ;
+      Printf.printf "> elapsed time: %f sec\n" (Unix.gettimeofday () -. start_time) ;
+
+      print_endline "> evaluating..." ;
+
+      match !eval_file with
+      | None -> Printf.printf "> no eval file, stopping here\n"
+      | Some file ->
+        begin
+          let fitness =
+            let stdout, stderr = run file [||] in
+            match stdout with
+            | [fs] -> float_of_string fs
+            | _ -> failwith (String.concat "" stdout) in
+          Printf.printf "> fitness: %f" fitness
+        end
     )
+
+let set_eval_file s =
+  eval_file := Some s
+
+let anon_arg name =
+  if Filename.check_suffix name ".ml" then
+    input_files := name :: !input_files
+  else
+    failwith ("unsupported file "^name)
+
+let args =
+  let open Arg in
+  align [
+  "--eval", String set_eval_file, "set the eval file"
+  ]
 
 let () =
   Arg.parse args anon_arg usage_msg ;
@@ -190,7 +220,7 @@ let () =
        let open Ast_mapper in
        let pstr' = search_mapper.structure search_mapper pstr in
 
-       Printf.printf "aperf: Found %d for loops for perforation\n" (List.length !for_loops) ;
+       Printf.printf "> found %d for loops for perforation\n" (List.length !for_loops) ;
 
        try_perforation pstr' ;
 
