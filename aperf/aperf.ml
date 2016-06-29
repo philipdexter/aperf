@@ -58,7 +58,7 @@ let perforate_property attributes =
                                    try
                                      let i =
                                        match payload with
-                                       | PStr [{pstr_desc = Pstr_eval ({ pexp_desc = Pexp_constant (Pconst_integer (i,_)) }, _)}] -> int_of_string i
+                                       | PStr [{pstr_desc = Pstr_eval ({ pexp_desc = Pexp_constant (Pconst_float (f,_)) }, _)}] -> float_of_string f
                                        | PStr [] -> raise Backup
                                        | _ -> failwith "bad perforation payload" in
                                      (attrs', Some i)
@@ -81,12 +81,13 @@ let active_exp_mapper mapper e =
     active_config := List.tl !active_config ;
     if do_perforation then
       begin
-        let (pexp_attributes, perforation) = perforate_property attributes in
+        let (pexp_attributes, _perforation) = perforate_property attributes in
+        let perforation = match _perforation with Some f -> f | None -> 0.8 in
         let this_of_that_of_expr this that expr = Exp.apply (Exp.ident { txt = Longident.Lident (this^"_of_"^that) ; loc = !default_loc }) [(Asttypes.Nolabel,expr)] in
         let float_of_int_of_expr = this_of_that_of_expr "float" "int" in
         let int_of_float_of_expr = this_of_that_of_expr "int" "float" in
         let new_bound = int_of_float_of_expr @@ Exp.apply (Exp.ident { txt = Longident.Lident "*." ; loc = !default_loc })
-            [Asttypes.Nolabel,float_of_int_of_expr bound ; Asttypes.Nolabel,Exp.constant (Const.float "0.8") ] in
+            [Asttypes.Nolabel,float_of_int_of_expr bound ; Asttypes.Nolabel,Exp.constant (Const.float (string_of_float perforation)) ] in
         mapper.expr mapper
         { (Exp.for_ p
              { start with pexp_desc = Pexp_constant (Pconst_integer (string_of_int 0, None)) }
