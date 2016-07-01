@@ -17,7 +17,7 @@ let exp_mapper mapper e =
   match e.pexp_desc with
   | Pexp_for (p, start, bound, dir, body) ->
     for_loops := ("hi" ^ (string_of_int e.pexp_loc.loc_start.pos_lnum)) :: !for_loops ;
-    e
+    default_mapper.expr mapper e
   | x -> default_mapper.expr mapper e
 
 let search_mapper =
@@ -87,7 +87,7 @@ let active_exp_mapper mapper e =
             [Asttypes.Nolabel, start ; Asttypes.Nolabel, new_relative_bound] in
         mapper.expr mapper
         { (Exp.for_ p
-             { start with pexp_desc = Pexp_constant (Pconst_integer (string_of_int 0, None)) }
+             start
              new_absolute_bound
              dir
              body)
