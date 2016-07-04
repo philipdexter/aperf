@@ -155,7 +155,7 @@ let try_perforation ast =
 
         ignore @@ Unix.waitpid [] _pid ;
 
-        !stdout_lines, !stderr_lines in
+        List.rev !stdout_lines, List.rev !stderr_lines in
 
 
       let print_both (a, b) =
