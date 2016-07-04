@@ -112,6 +112,9 @@ let active_mapper =
             default_mapper.expr mapper expr) }
 
 let try_perforation ast =
+  let results_out = open_out "results.data" in
+  Printf.fprintf results_out "# config time accuracy\n" ;
+
   let rec replicate i e = if i == 0 then [] else e :: replicate (i-1) e in
   let rec count_to i = let rec loop k = if k > i then [] else k :: loop (k+1) in loop 0 in
   let basic_configs len = [replicate len false] @ List.map (fun i -> replicate i false @ [true] @ replicate (len-1-i) false) (count_to (len-1)) in
@@ -183,9 +186,11 @@ let try_perforation ast =
             match stdout with
             | [fs] -> abs_float (float_of_string fs)
             | _ -> failwith (String.concat "" stdout) in
-          Printf.printf "> fitness: %f" fitness
+          Printf.printf "> fitness: %f\n" fitness ;
+          Printf.fprintf results_out "%s %f %f\n" (String.concat "-" (List.map string_of_bool used_config)) total_time fitness ;
         end
-    )
+    ) ;
+  close_out results_out
 
 let set_eval_file s =
   eval_file := Some s
