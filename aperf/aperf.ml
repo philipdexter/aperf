@@ -181,7 +181,7 @@ let try_perforation ast =
           let fitness =
             let stdout, stderr = run file [||] in
             match stdout with
-            | [fs] -> float_of_string fs
+            | [fs] -> abs_float (float_of_string fs)
             | _ -> failwith (String.concat "" stdout) in
           Printf.printf "> fitness: %f" fitness
         end
