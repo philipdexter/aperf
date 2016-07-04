@@ -47,19 +47,19 @@ let perforate_property attributes =
   let rec loop attrs =
     match attrs with
     | [] -> attrs, None
-    | (loc,payload) :: attrs' -> if String.equal "perforate" loc.txt
-                                 then
-                                   try
-                                     let i =
-                                       match payload with
-                                       | PStr [{pstr_desc = Pstr_eval ({ pexp_desc = Pexp_constant (Pconst_float (f,_)) }, _)}] -> float_of_string f
-                                       | PStr [] -> raise Backup
-                                       | _ -> failwith "bad perforation payload" in
-                                     (attrs', Some i)
-                                   with Backup -> (attrs', None)
-                                 else
-                                   match loop attrs' with
-                                     (attrs'', r) -> ((loc,payload) :: attrs'', r) in
+    | (loc,payload) :: attrs' ->
+      if String.equal "perforate" loc.txt then
+        try
+          let i =
+            match payload with
+            | PStr [{pstr_desc = Pstr_eval ({ pexp_desc = Pexp_constant (Pconst_float (f,_)) }, _)}] -> float_of_string f
+            | PStr [] -> raise Backup
+            | _ -> failwith "bad perforation payload" in
+          (attrs', Some i)
+        with Backup -> (attrs', None)
+      else
+        match loop attrs' with
+          (attrs'', r) -> ((loc,payload) :: attrs'', r) in
   loop attributes
 
 let active_exp_mapper mapper e =
@@ -70,12 +70,14 @@ let active_exp_mapper mapper e =
   let attributes = e.pexp_attributes in
   match e.pexp_desc with
   | Pexp_for (p, start, bound, dir, body) ->
-    let do_perforation = List.hd !active_config in
+    let this_config = List.hd !active_config in
     active_config := List.tl !active_config ;
+    let do_perforation = this_config <> 1. in
     if do_perforation then
       begin
         let (pexp_attributes, _perforation) = perforate_property attributes in
         let perforation = match _perforation with Some f -> f | None -> 0.8 in
+        let perforation = this_config in
         let this_of_that_of_expr this that expr = Exp.apply (Exp.ident { txt = Longident.Lident (this^"_of_"^that) ; loc = !default_loc }) [(Asttypes.Nolabel,expr)] in
         let float_of_int_of_expr = this_of_that_of_expr "float" "int" in
         let int_of_float_of_expr = this_of_that_of_expr "int" "float" in
@@ -114,13 +116,17 @@ let active_mapper =
 let try_perforation ast =
   let results_out = open_out "results.data" in
   Printf.fprintf results_out "# config time accuracy\n" ;
-
-  let rec replicate i e = if i == 0 then [] else e :: replicate (i-1) e in
-  let rec count_to i = let rec loop k = if k > i then [] else k :: loop (k+1) in loop 0 in
-  let basic_configs len = [replicate len false] @ List.map (fun i -> replicate i false @ [true] @ replicate (len-1-i) false) (count_to (len-1)) in
+  let rec perforations list = function
+    | 0 -> []
+    | 1 -> List.map (fun x -> [x]) list
+    | len ->
+      let rest = perforations list (len-1) in
+      List.concat @@ List.map (fun xs -> List.map (fun x -> x :: xs) list) rest in
+  let basic_configs len = perforations [0.25 ; 0.75 ; 1.] len in
   basic_configs (List.length !for_loops) |> List.iter (fun config ->
+      let used_config = config in
       active_config := config ;
-      Printf.printf ">>>>\n> running with config:\n> %s\n" (String.concat "-" (List.map string_of_bool !active_config)) ;
+      Printf.printf ">>>>\n> running with config:\n> %s\n" (String.concat "-" (List.map string_of_float !active_config)) ;
       let ast' =
         let open Ast_mapper in
         active_mapper.structure active_mapper ast in
@@ -187,7 +193,7 @@ let try_perforation ast =
             | [fs] -> abs_float (float_of_string fs)
             | _ -> failwith (String.concat "" stdout) in
           Printf.printf "> fitness: %f\n" fitness ;
-          Printf.fprintf results_out "%s %f %f\n" (String.concat "-" (List.map string_of_bool used_config)) total_time fitness ;
+          Printf.fprintf results_out "%s %f %f\n" (String.concat "-" (List.map string_of_float used_config)) total_time fitness ;
         end
     ) ;
   close_out results_out
