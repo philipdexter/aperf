@@ -4,6 +4,7 @@ let input_files = ref []
 
 let eval_file = ref None
 let build_command = ref None
+let perfs = ref None
 
 let usage_msg =
   Printf.sprintf
@@ -123,7 +124,8 @@ let try_perforation ast =
     | len ->
       let rest = perforations list (len-1) in
       List.concat @@ List.map (fun xs -> List.map (fun x -> x :: xs) list) rest in
-  let basic_configs len = perforations [0.25 ; 0.75 ; 1.] len in
+  let perfs' = match !perfs with None -> [0.25 ; 0.50 ; 0.75 ; 1.] | Some p -> p in
+  let basic_configs len = perforations perfs' len in
   basic_configs (List.length !for_loops) |> List.iter (fun config ->
       let used_config = config in
       active_config := config ;
@@ -211,6 +213,9 @@ let set_eval_file s =
 let set_build_command s =
   build_command := Some s
 
+let set_perfs s =
+  perfs := Some (List.map float_of_string (Str.split (Str.regexp ",") s))
+
 let anon_arg name =
   if Filename.check_suffix name ".ml" then
     input_files := name :: !input_files
@@ -219,9 +224,10 @@ let anon_arg name =
 
 let args =
   let open Arg in
-  align[
+  align [
   "--eval", String set_eval_file, "set the eval file" ;
   "--build", String set_build_command, "set the build command" ;
+  "--perfs", String set_perfs, "set the perforations" ;
   ]
 
 let () =
