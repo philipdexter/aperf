@@ -20,7 +20,7 @@ Executable ppperforate
 
 Executable aperf
   BuildTools: ocamlbuild
-  BuildDepends: compiler-libs.common, unix
+  BuildDepends: compiler-libs.common, unix, str
   Path: aperf
   MainIs: aperf.ml
   CompiledObject: best

@@ -3,6 +3,7 @@ let for_loops = ref []
 let input_files = ref []
 
 let eval_file = ref None
+let build_command = ref None
 
 let usage_msg =
   Printf.sprintf
@@ -174,7 +175,12 @@ let try_perforation ast =
         List.iter print_endline b in
 
       print_endline "> building..." ;
-      print_both @@ run "ocamlopt" [| fout ; "-o" ; fout_native |] ;
+      print_both @@ (match !build_command with
+      | None -> run "ocamlfind" [| "ocamlopt" ; fout ; "-o" ; fout_native |]
+      | Some bc ->
+        (match Str.split (Str.regexp " ") bc with
+         | [] -> failwith ("error: bad command: " ^ bc)
+         | command :: args -> run command (Array.of_list (args @ [ fout ; fout_native])))) ;
 
       print_endline "> running..." ;
       let start_time = Unix.gettimeofday () in
@@ -201,6 +207,9 @@ let try_perforation ast =
 let set_eval_file s =
   eval_file := Some s
 
+let set_build_command s =
+  build_command := Some s
+
 let anon_arg name =
   if Filename.check_suffix name ".ml" then
     input_files := name :: !input_files
@@ -209,8 +218,9 @@ let anon_arg name =
 
 let args =
   let open Arg in
-  align [
-  "--eval", String set_eval_file, "set the eval file"
+  align[
+  "--eval", String set_eval_file, "set the eval file" ;
+  "--build", String set_build_command, "set the build command" ;
   ]
 
 let () =
