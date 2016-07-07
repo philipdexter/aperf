@@ -117,7 +117,7 @@ let active_mapper =
 
 let try_perforation ast =
   let results_out = open_out "results.data" in
-  Printf.fprintf results_out "# config time accuracy\n" ;
+  Printf.fprintf results_out "# config path time accuracy\n" ;
   let rec perforations list = function
     | 0 -> []
     | 1 -> List.map (fun x -> [x]) list
@@ -176,6 +176,8 @@ let try_perforation ast =
         print_endline "> stderr" ;
         List.iter print_endline b in
 
+      Printf.printf "> - %s -\n" fout ;
+
       print_endline "> building..." ;
       print_both @@ (match !build_command with
       | None -> run "ocamlfind" [| "ocamlopt" ; fout ; "-o" ; fout_native |]
@@ -187,7 +189,8 @@ let try_perforation ast =
       print_endline "> running..." ;
       let start_time = Unix.gettimeofday () in
       print_both @@ run fout_native [||] ;
-      Printf.printf "> elapsed time: %f sec\n" (Unix.gettimeofday () -. start_time) ;
+      let total_time = Unix.gettimeofday () -. start_time in
+      Printf.printf "> elapsed time: %f sec\n" total_time ;
 
       print_endline "> evaluating..." ;
 
