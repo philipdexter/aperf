@@ -189,19 +189,20 @@ let try_perforation ast =
 
       print_endline "> evaluating..." ;
 
-      match !eval_file with
-      | None -> Printf.printf "> no eval file, stopping here\n"
-      | Some file ->
-        begin
-          let fitness =
-            let stdout, stderr = run file [||] in
-            match stdout with
-            | [fs] -> abs_float (float_of_string fs)
-            | _ -> failwith (String.concat "" stdout) in
-          Printf.printf "> fitness: %f\n" fitness ;
-          Printf.fprintf results_out "%s %f %f\n" (String.concat "-" (List.map string_of_float used_config)) total_time fitness ;
-        end
-    ) ;
+      let fitness = match !eval_file with
+        | None -> (Printf.printf "> no eval file, stopping here\n" ; 0.)
+        | Some file ->
+          begin
+            let fitness =
+              let stdout, stderr = run file [| fout_native |] in
+              match stdout with
+              | [fs] -> (try (abs_float (float_of_string fs)) with _ -> failwith (String.concat "" stdout))
+              | _ -> failwith (String.concat "" stdout) in
+            Printf.printf "> fitness: %f\n" fitness ;
+            fitness
+          end in
+
+        Printf.fprintf results_out "%s %s %f %f\n" (String.concat "-" (List.map string_of_float used_config)) fout_native total_time fitness) ;
   close_out results_out
 
 let set_eval_file s =
