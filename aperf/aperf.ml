@@ -42,34 +42,11 @@ let search_mapper =
 
 let active_config = ref []
 
-exception Backup
-let perforate_property attributes =
-  let open Location in
-  let open Parsetree in
-  let rec loop attrs =
-    match attrs with
-    | [] -> attrs, None
-    | (loc,payload) :: attrs' ->
-      if String.equal "perforate" loc.txt then
-        try
-          let i =
-            match payload with
-            | PStr [{pstr_desc = Pstr_eval ({ pexp_desc = Pexp_constant (Pconst_float (f,_)) }, _)}] -> float_of_string f
-            | PStr [] -> raise Backup
-            | _ -> failwith "bad perforation payload" in
-          (attrs', Some i)
-        with Backup -> (attrs', None)
-      else
-        match loop attrs' with
-          (attrs'', r) -> ((loc,payload) :: attrs'', r) in
-  loop attributes
-
 let active_exp_mapper mapper e =
   let open Parsetree in
   let open Location in
   let open Ast_helper in
   let open Ast_mapper in
-  let attributes = e.pexp_attributes in
   match e.pexp_desc with
   | Pexp_for (p, start, bound, dir, body) ->
     let this_config = List.hd !active_config in
@@ -77,8 +54,6 @@ let active_exp_mapper mapper e =
     let do_perforation = this_config <> 1. in
     if do_perforation then
       begin
-        let (pexp_attributes, _perforation) = perforate_property attributes in
-        let perforation = match _perforation with Some f -> f | None -> 0.8 in
         let perforation = this_config in
         let this_of_that_of_expr this that expr = Exp.apply (Exp.ident { txt = Longident.Lident (this^"_of_"^that) ; loc = !default_loc }) [(Asttypes.Nolabel,expr)] in
         let float_of_int_of_expr = this_of_that_of_expr "float" "int" in
@@ -90,12 +65,11 @@ let active_exp_mapper mapper e =
         let new_absolute_bound = Exp.apply (Exp.ident { txt = Longident.Lident "+" ; loc = !default_loc })
             [Asttypes.Nolabel, start ; Asttypes.Nolabel, new_relative_bound] in
         mapper.expr mapper
-        { (Exp.for_ p
+          (Exp.for_ p
              start
              new_absolute_bound
              dir
              body)
-          with pexp_attributes }
       end
     else
       default_mapper.expr mapper e
@@ -114,6 +88,41 @@ let active_mapper =
             active_exp_mapper mapper expr
           else
             default_mapper.expr mapper expr) }
+
+let run command args =
+  let (pr0, pw0) = Unix.pipe () in
+  let (pr1, pw1) = Unix.pipe () in
+  let (pr2, pw2) = Unix.pipe () in
+  let _pid = Unix.create_process command (Array.append [| command |] args) pr0 pw1 pw2 in
+  Unix.close pw0 ;
+  Unix.close pw1 ;
+  Unix.close pw2 ;
+  let echo_out = Unix.in_channel_of_descr pr1 in
+  let echo_stderr = Unix.in_channel_of_descr pr2 in
+  let stdout_lines = ref [] in
+  (try
+     while true do
+       stdout_lines := input_line echo_out :: !stdout_lines
+     done
+   with
+     End_of_file -> close_in echo_out) ;
+  let stderr_lines = ref [] in
+  (try
+     while true do
+       stderr_lines := input_line echo_stderr :: !stderr_lines
+     done
+   with
+     End_of_file -> close_in echo_stderr) ;
+
+  ignore @@ Unix.waitpid [] _pid ;
+
+  List.rev !stdout_lines, List.rev !stderr_lines
+
+let print_both (a, b) =
+  print_endline "> stdout" ;
+  List.iter print_endline a ;
+  print_endline "> stderr" ;
+  List.iter print_endline b
 
 let try_perforation ast =
   let results_out = open_out "results.data" in
@@ -139,42 +148,6 @@ let try_perforation ast =
       let fn = open_out fout in
       Printf.fprintf fn "%s\n" (Pprintast.string_of_structure ast') ;
       close_out fn ;
-
-      let run command args =
-        let (pr0, pw0) = Unix.pipe () in
-        let (pr1, pw1) = Unix.pipe () in
-        let (pr2, pw2) = Unix.pipe () in
-        let _pid = Unix.create_process command (Array.append [| command |] args) pr0 pw1 pw2 in
-        Unix.close pw0 ;
-        Unix.close pw1 ;
-        Unix.close pw2 ;
-        let echo_out = Unix.in_channel_of_descr pr1 in
-        let echo_stderr = Unix.in_channel_of_descr pr2 in
-        let stdout_lines = ref [] in
-        (try
-           while true do
-             stdout_lines := input_line echo_out :: !stdout_lines
-           done
-         with
-           End_of_file -> close_in echo_out) ;
-        let stderr_lines = ref [] in
-        (try
-           while true do
-             stderr_lines := input_line echo_stderr :: !stderr_lines
-           done
-         with
-           End_of_file -> close_in echo_stderr) ;
-
-        ignore @@ Unix.waitpid [] _pid ;
-
-        List.rev !stdout_lines, List.rev !stderr_lines in
-
-
-      let print_both (a, b) =
-        print_endline "> stdout" ;
-        List.iter print_endline a ;
-        print_endline "> stderr" ;
-        List.iter print_endline b in
 
       Printf.printf "> - %s -\n" fout ;
 
