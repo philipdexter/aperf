@@ -5,6 +5,7 @@ a.out
 *.out
 
 _build/
-META
 setup.data
 setup.log
+
+*.install

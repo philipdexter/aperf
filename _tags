@@ -1,30 +1,10 @@
-# OASIS_START
-# DO NOT EDIT (digest: 917b2afb1fa269d5e7c1bb75426df737)
-# Ignore VCS directories, you can use the same kind of rule outside
-# OASIS_START/STOP if you want to exclude directories that contains
-# useless stuff for the build process
 true: annot, bin_annot
-<**/.svn>: -traverse
-<**/.svn>: not_hygienic
-".bzr": -traverse
-".bzr": not_hygienic
-".hg": -traverse
-".hg": not_hygienic
 ".git": -traverse
 ".git": not_hygienic
-"_darcs": -traverse
-"_darcs": not_hygienic
-# Executable ppperforate
-<lib/ppperforate.{native,byte}>: package(compiler-libs.common)
-<lib/ppperforate.{native,byte}>: package(ppx_tools.metaquot)
-<lib/*.ml{,i,y}>: package(compiler-libs.common)
-<lib/*.ml{,i,y}>: package(ppx_tools.metaquot)
-# Executable aperf
-<aperf/aperf.{native,byte}>: package(compiler-libs.common)
-<aperf/aperf.{native,byte}>: package(str)
-<aperf/aperf.{native,byte}>: package(unix)
-<aperf/*.ml{,i,y}>: package(compiler-libs.common)
-<aperf/*.ml{,i,y}>: package(str)
-<aperf/*.ml{,i,y}>: package(unix)
-# OASIS_STOP
+
+
+<aperf>: include
+<aperf/*>: package(compiler-libs.common), package(str), package(unix)
+
 <tmp>: -traverse
+<examples>: -traverse

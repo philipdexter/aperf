@@ -5,11 +5,11 @@ maintainer: "Philip Dexter <philip.dexter@gmail.com>"
 authors: "Philip Dexter <philip.dexter@gmail.com>"
 homepage: "http://google.com"
 build: [
-  ["ocaml" "setup.ml" "-configure" "--prefix" "%{prefix}%"]
-  ["ocaml" "setup.ml" "-build"]
+  ["ocaml" "pkg/pkg.ml" "build" "--pinned" pinned ]
 ]
-install: ["ocaml" "setup.ml" "-install"]
-remove: ["ocamlfind" "remove" "ppperforate"]
 depends: [
   "ocamlfind" {build}
+  "ocamlbuild" {build}
+  "compiler-libs.common" {build}
+  "topkg" {build}
 ]

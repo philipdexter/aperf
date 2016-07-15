@@ -1,4 +1,4 @@
 S .
 B _build
-PKG ppx_tools
-PKG ppx_tools.metaquot
+PKG topkg
+PKG compiler-libs
