@@ -1,11 +1,5 @@
-tmp/
-
-a.out
-*.native
-*.out
+aperf.native
 
 _build/
-setup.data
-setup.log
 
 *.install
