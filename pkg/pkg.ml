@@ -4,6 +4,6 @@
 open Topkg
 
 let () =
-  Pkg.describe "ppperforate" @@ fun c->
+  Pkg.describe "aperf" @@ fun c->
   Ok [Pkg.bin "aperf/aperf"]
 
