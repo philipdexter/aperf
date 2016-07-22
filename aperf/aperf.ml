@@ -1,29 +1,97 @@
-module type Config_gen = sig
+type config = float list
 
-  (** takes the number of loops *)
-  val init : int -> unit
+type config_result =
+  { conf : config
+  ; time : float
+  ; speedup : float
+  ; accuracy : float
+  ; score : float
+}
 
-  (** Evaluates to None when there are no more configs to run *)
-  val next_config : unit -> float list option
-  val reset : unit -> unit
+module type Config_run = sig
 
+  (** num_loops -> config_run_function -> list of configs and their results *)
+  val run : int -> (config -> config_result) -> config * config_result list
 end
 
-module Exhaustive : Config_gen = struct
+module Exhaustive = struct
+  let run num_loops f =
+    let perfs = Util.perforations [0.0; 0.05; 0.1; 0.15; 0.2; 0.25; 0.3; 0.35; 0.4; 0.45; 0.5; 0.55; 0.6; 0.65; 0.7; 0.75; 0.8; 0.85; 0.9; 0.95] num_loops in
+    List.map (fun c -> c, f c) perfs
+end
 
-  let perfs = ref []
-  let saved_perfs = ref []
+module HillClimb = struct
+  (* TODO make this have type config_run and make it return a list of all results *)
+  (* maybe the last result is the best? or no, make the user find the best result like in exhaustive *)
 
-  let init num_loops =
-    perfs := Util.perforations [0.0; 0.05; 0.1; 0.15; 0.2; 0.25; 0.3; 0.35; 0.4; 0.45; 0.5; 0.55; 0.6; 0.65; 0.7; 0.75; 0.8; 0.85; 0.9; 0.95] num_loops ;
-    saved_perfs := !perfs
 
-  let next_config () =
-    match !perfs with
-    | [] -> None
-    | x::xs -> (perfs := xs ; Some x)
-  let reset () =
-    perfs := !saved_perfs
+  let run num_loops f =
+    (* run each loop perforated by itself and keep track of its personal scores *)
+
+    let module ScoreMap = Map.Make (struct type t = float let compare = compare end) in
+
+    let loop_scores = Array.init num_loops (fun _ -> ScoreMap.empty ) in
+    let update_score i k v =
+      loop_scores.(i) <- ScoreMap.add k v loop_scores.(i) in
+    let make_solo_conf i p = Util.replicate 1.0 i @ [p] @ Util.replicate 1.0 (num_loops - i - 1) in
+
+    let next_perf = ref 0. in
+    let next_config () =
+      if !next_perf >= 1. then None
+      else (let cp = !next_perf in
+            next_perf := !next_perf +. 0.25;
+            Some cp) in
+
+    for i = 0 to (num_loops-1) do
+      Printf.printf "> perforating loop %d\n" (i+1) ;
+
+      next_perf := 0. ;
+
+      Util.iter_until next_config (fun perf ->
+          let conf = make_solo_conf i perf in
+          let {score=score} = f conf in
+          update_score i perf score
+        ) ;
+
+    done ;
+
+    Array.iter (fun map ->
+        List.iter (fun (k,v) -> Printf.printf "%f - %f\n" k v) (ScoreMap.bindings map)) loop_scores ;
+
+    (* best is a list of form (config, score) where the ith element is the best perforation score for loop i *)
+    let best = Array.map (fun l -> ScoreMap.bindings l |>
+                                   Util.max_by snd (0.,0.)) loop_scores in
+
+    print_endline "best configurations" ;
+    Array.iter (fun (k,v) ->
+        Printf.printf "%f - %f\n" k v) best ;
+
+
+    (* start at best configs and hill climb *)
+
+    let best_config_result = f (List.map fst (Array.to_list best)) in
+
+    let rec hill_climb confs best_config_result step =
+      let gen_test test = Util.mixups (List.map (fun c -> [ c +. step ; c -. step]) test) test in
+      let new_config, new_best_config_result =
+        (* generate new configs to test *)
+        gen_test (Array.to_list confs) |>
+        (* test each configuration *)
+        List.map (fun c -> c, f c) |>
+        (* find the best score *)
+        Util.max_by_1 (fun (_,c) -> c.score) in
+      if new_best_config_result.score <= best_config_result.score then
+        (print_endline "no more improvement" ; confs, best_config_result)
+      else
+        begin
+          let new_step = step -. 0.01 in
+          if new_step <= 0. then
+            (print_endline "no more steps" ; Array.of_list new_config, new_best_config_result)
+          else
+            (Printf.printf "climbing to %s - %f\n" (String.concat " " (List.map string_of_float new_config)) new_best_config_result.score ; hill_climb (Array.of_list new_config) new_best_config_result new_step)
+        end in
+
+    hill_climb (Array.map fst best) best_config_result 0.1
 
 end
 
@@ -136,8 +204,6 @@ let active_exp_mapper mapper e =
     else
       default_mapper.expr mapper e
   | x -> default_mapper.expr mapper e
-
-(* TODO plot all the points to show errors in kmeans *)
 
 let active_mapper =
   let open Parsetree in
@@ -256,107 +322,31 @@ let try_perforation ast =
   let clamp_all = List.map (Util.clamp 0.0 1.0) in
 
   if !auto_explore then begin
-    (* run each loop perforated by itself and keep track of its personal scores *)
-
-    let module ScoreMap = Map.Make (struct type t = float let compare = compare end) in
-
-    let loop_scores = Array.init num_loops (fun _ -> ScoreMap.empty ) in
-    let update_score i k v =
-      loop_scores.(i) <- ScoreMap.add k v loop_scores.(i) in
-    let make_solo_conf i p = Util.replicate 1.0 i @ [p] @ Util.replicate 1.0 (num_loops - i - 1) in
-
-    let next_perf = ref 0. in
-    let next_config () =
-      if !next_perf >= 1. then None
-      else (let cp = !next_perf in
-            next_perf := !next_perf +. 0.25;
-            Some cp) in
-
-    for i = 0 to (num_loops-1) do
-      Printf.printf "> perforating loop %d\n" (i+1) ;
-
-      next_perf := 0. ;
-
-      Util.iter_until next_config (fun perf ->
-          let conf = clamp_all (make_solo_conf i perf) in
-          let time, fitness = run_with_config (`Perforated conf) in
-          let speedup, accuracy, score = calc_stats time fitness in
-          print_stats speedup accuracy score ;
-          update_score i perf score
-        ) ;
-
-    done ;
-
-    Array.iter (fun map ->
-        List.iter (fun (k,v) -> Printf.printf "%f - %f\n" k v) (ScoreMap.bindings map)) loop_scores ;
-
-    (* best is a list of form (config, score) where the ith element is the best perforation score for loop i *)
-    let best = Array.map (fun l -> ScoreMap.bindings l |>
-                                   Util.max_by snd (0.,0.)) loop_scores in
-
-    print_endline "best configurations" ;
-    Array.iter (fun (k,v) ->
-        Printf.printf "%f - %f\n" k v) best ;
-
-
-    (* start at best configs and hill climb *)
-
-    let time, fitness = run_with_config (`Perforated (clamp_all (List.map fst (Array.to_list best)))) in
-    let speedup, accuracy, score = calc_stats time fitness in
-    print_stats speedup accuracy score ;
-
-    let rec hill_climb confs best_score step =
-      let rec mixups things solids =
-        match things, solids with
-        | [], [] -> []
-        | t::ts, s::ss ->
-          let rest = List.map (fun r -> s :: r) (mixups ts ss)
-          in List.map (fun sel -> sel :: ss) t @ rest
-        | _ -> assert false in
-      let test_config conf =
-        let time, fitness = run_with_config (`Perforated (clamp_all conf)) in
-        let speedup, accuracy, score = calc_stats time fitness in
-        print_stats speedup accuracy score ;
-        score in
-      (* TODO implement skipping *)
-      (* TODO make sure bound never goes above 1.0 *)
-      let gen_test test = mixups (List.map (fun c -> [ c +. step ; c -. step]) test) test in
-      let (new_config, new_best_score) =
-        (* generate new configs to test *)
-        gen_test (Array.to_list confs) |>
-        (* test each configuration *)
-        List.map (fun c -> c, test_config c) |>
-        (* find the best score *)
-        Util.max_by snd (Array.to_list confs, best_score) in
-      if new_best_score <= best_score then
-        (print_endline "no more improvement" ; confs, best_score)
-      else
-        begin
-          let new_step = step -. 0.01 in
-          if new_step <= 0. then
-            (print_endline "no more steps" ; Array.of_list new_config, new_best_score)
-          else
-            (Printf.printf "climbing to %s - %f\n" (String.concat " " (List.map string_of_float new_config)) new_best_score ; hill_climb (Array.of_list new_config) new_best_score new_step)
-        end in
-
-
-    let best_config, best_score = hill_climb (Array.map fst best) score 0.1 in
-    Printf.printf "best improvement : %s - %f" (String.concat " " (List.map string_of_float (Array.to_list best_config))) best_score
-  end
-  else begin
-    Exhaustive.init num_loops ;
-
-    (* try a bunch of different combinations *)
     let test_config conf =
       let time, fitness = run_with_config (`Perforated (clamp_all conf)) in
       let speedup, accuracy, score = calc_stats time fitness in
       print_stats speedup accuracy score ;
-      score in
+      { conf ; time ; speedup ; accuracy ; score } in
 
-    let new_config, new_best_score =
-      Util.map_over_iter Exhaustive.next_config (fun c -> c, test_config c) |>
-      Util.max_by snd ([], 0.) in
-    Printf.printf "best improvement : %s - %f" (String.concat " " (List.map string_of_float new_config)) new_best_score ;
+    let best_config, best_config_result = HillClimb.run num_loops test_config in
+    () ;
+      (* HillClimb.run num_loops test_config |> *)
+      (* Util.max_by_1 (fun (_,c) -> c.score) in *)
+
+    Printf.printf "best improvement : %s - %f" (String.concat " " (List.map string_of_float (Array.to_list best_config))) best_config_result.score
+  end
+  else begin
+    let test_config conf =
+      let time, fitness = run_with_config (`Perforated (clamp_all conf)) in
+      let speedup, accuracy, score = calc_stats time fitness in
+      print_stats speedup accuracy score ;
+      { conf ; time ; speedup ; accuracy ; score } in
+
+    (* try a bunch of different combinations *)
+    let new_config, new_best_config_result =
+      Exhaustive.run num_loops test_config |>
+      Util.max_by_1 (fun (_,c) -> c.score) in
+    Printf.printf "best improvement : %s - %f" (String.concat " " (List.map string_of_float new_config)) new_best_config_result.score ;
   end ;
 
   close_out results_out

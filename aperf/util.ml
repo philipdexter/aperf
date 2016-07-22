@@ -20,6 +20,11 @@ let max_by f z l =
       aux new_max xs in
   aux z l
 
+let max_by_1 f l =
+  match l with
+  | [] -> failwith "max_by_1: empty list"
+  | (x::xs) -> max_by f x xs
+
 let rec map_over_iter getter f =
   match getter () with
   | None -> []
@@ -29,3 +34,11 @@ let rec iter_until getter f =
   match getter () with
   | None -> ()
   | Some a -> f a ; iter_until getter f
+
+let rec mixups things solids =
+  match things, solids with
+  | [], [] -> []
+  | t::ts, s::ss ->
+    let rest = List.map (fun r -> s :: r) (mixups ts ss)
+    in List.map (fun sel -> sel :: ss) t @ rest
+  | _ -> failwith "mixups, lists must be of equal length"
