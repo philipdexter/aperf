@@ -32,5 +32,8 @@ Below is a combined graph where the trained results are in red and the
 live results are in blue.
 The green points are the additional configurations which the live data
 set discovered.
+Green lines are when accuracy increased for a configuration from the
+training run to the live run and a red line is when accuracy
+decreased.
 
 ![](combined.png)
