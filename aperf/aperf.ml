@@ -11,21 +11,17 @@ type config_result =
 module type Config_run = sig
 
   (** num_loops -> config_run_function -> list of configs and their results *)
-  val run : int -> (config -> config_result) -> config * config_result list
+  val run : int -> (config -> config_result) -> (config * config_result) list
 end
 
-module Exhaustive = struct
+module Exhaustive : Config_run = struct
   let run num_loops f =
     let perfs = Util.perforations [0.0; 0.05; 0.1; 0.15; 0.2; 0.25; 0.3; 0.35; 0.4; 0.45; 0.5; 0.55; 0.6; 0.65; 0.7; 0.75; 0.8; 0.85; 0.9; 0.95] num_loops in
     List.map (fun c -> c, f c) perfs
 end
 
-module HillClimb = struct
-  (* TODO make this have type config_run and make it return a list of all results *)
-  (* maybe the last result is the best? or no, make the user find the best result like in exhaustive *)
-
-
-  let run num_loops f =
+module HillClimb : Config_run = struct
+    let run num_loops f =
     (* run each loop perforated by itself and keep track of its personal scores *)
 
     let module ScoreMap = Map.Make (struct type t = float let compare = compare end) in
@@ -75,7 +71,7 @@ module HillClimb = struct
       let gen_test test = Util.mixups (List.map (fun c -> [ c +. step ; c -. step]) test) test in
       let new_config, new_best_config_result =
         (* generate new configs to test *)
-        gen_test (Array.to_list confs) |>
+        gen_test confs |>
         (* test each configuration *)
         List.map (fun c -> c, f c) |>
         (* find the best score *)
@@ -86,12 +82,12 @@ module HillClimb = struct
         begin
           let new_step = step -. 0.01 in
           if new_step <= 0. then
-            (print_endline "no more steps" ; Array.of_list new_config, new_best_config_result)
+            (print_endline "no more steps" ; new_config, new_best_config_result)
           else
-            (Printf.printf "climbing to %s - %f\n" (String.concat " " (List.map string_of_float new_config)) new_best_config_result.score ; hill_climb (Array.of_list new_config) new_best_config_result new_step)
+            (Printf.printf "climbing to %s - %f\n" (String.concat " " (List.map string_of_float new_config)) new_best_config_result.score ; hill_climb new_config new_best_config_result new_step)
         end in
 
-    hill_climb (Array.map fst best) best_config_result 0.1
+    [hill_climb (Array.to_list (Array.map fst best)) best_config_result 0.1]
 
 end
 
@@ -321,33 +317,27 @@ let try_perforation ast =
   (* we never want to run a configuration below 0 or above 1 *)
   let clamp_all = List.map (Util.clamp 0.0 1.0) in
 
-  if !auto_explore then begin
-    let test_config conf =
-      let time, fitness = run_with_config (`Perforated (clamp_all conf)) in
-      let speedup, accuracy, score = calc_stats time fitness in
-      print_stats speedup accuracy score ;
-      { conf ; time ; speedup ; accuracy ; score } in
+  (* function to test each configuration with *)
+  let test_config conf =
+    let time, fitness = run_with_config (`Perforated (clamp_all conf)) in
+    let speedup, accuracy, score = calc_stats time fitness in
+    print_stats speedup accuracy score ;
+    { conf ; time ; speedup ; accuracy ; score } in
 
-    let best_config, best_config_result = HillClimb.run num_loops test_config in
-    () ;
-      (* HillClimb.run num_loops test_config |> *)
-      (* Util.max_by_1 (fun (_,c) -> c.score) in *)
+  (*
+   * choose which config runner to use
+   * right now it's either exhaustive search or hill climbing
+   *)
+  let runner = if !auto_explore then (module HillClimb : Config_run) else (module Exhaustive) in
 
-    Printf.printf "best improvement : %s - %f" (String.concat " " (List.map string_of_float (Array.to_list best_config))) best_config_result.score
-  end
-  else begin
-    let test_config conf =
-      let time, fitness = run_with_config (`Perforated (clamp_all conf)) in
-      let speedup, accuracy, score = calc_stats time fitness in
-      print_stats speedup accuracy score ;
-      { conf ; time ; speedup ; accuracy ; score } in
+  let best_config, best_config_result =
+    let (module Runner) = runner in
+    Runner.run num_loops test_config |>
+    Util.max_by_1 (fun (_,c) -> c.score) in
 
-    (* try a bunch of different combinations *)
-    let new_config, new_best_config_result =
-      Exhaustive.run num_loops test_config |>
-      Util.max_by_1 (fun (_,c) -> c.score) in
-    Printf.printf "best improvement : %s - %f" (String.concat " " (List.map string_of_float new_config)) new_best_config_result.score ;
-  end ;
+  Printf.printf "best improvement : %s - %f"
+    (String.concat " " (List.map string_of_float best_config))
+    best_config_result.score ;
 
   close_out results_out
 
