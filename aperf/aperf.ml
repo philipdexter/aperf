@@ -352,7 +352,7 @@ let aperf =
   (* TODO add accuracy bound argument *)
   (* TODO expose tmp directory to use *)
   let opt_eval =
-    let doc = "Run CMD to evaluate the fitness of each result" in
+    let doc = "Run CMD to evaluate the accuracy of each result" in
     let docv = "CMD" in
     Arg.(required & opt (some string) None & info ["E" ; "eval"] ~doc ~docv) in
   let opt_build =
