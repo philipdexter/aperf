@@ -10,7 +10,7 @@ build: [
 depends: [
   "ocamlfind" {build}
   "ocamlbuild" {build}
-  "compiler-libs.common" {build}
   "topkg" {build}
-  "cmdliner" {build}
+  "compiler-libs"
+  "cmdliner"
 ]
