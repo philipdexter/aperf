@@ -1,9 +1,9 @@
 opam-version: "1.2"
-name: "aperf"
-version: "0.1"
 maintainer: "Philip Dexter <philip.dexter@gmail.com>"
 authors: "Philip Dexter <philip.dexter@gmail.com>"
 homepage: "http://github.com/philipdexter/aperf"
+bug-reports: "http://github.com/philipdexter/aperf/issues"
+dev-repo: "http://git.phfilip.com/aperf"
 build: [
   ["ocaml" "pkg/pkg.ml" "build" "--pinned" pinned ]
 ]
