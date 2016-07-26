@@ -256,7 +256,7 @@ let try_perforation eval_cmd build_cmd explore results_file ast =
     let ast' =
       let open Ast_mapper in
       active_mapper.structure active_mapper ast in
-    let fout = Filename.temp_file ~temp_dir:"./tmp/" "perf" ".ml" in
+    let fout = Filename.temp_file ~temp_dir:"./tmp/" "aperf" ".ml" in
     let fout_native = String.sub fout 0 (String.length fout - 3) ^ ".native" in
     let fn = open_out fout in
     Printf.fprintf fn "%s\n" (Pprintast.string_of_structure ast') ;
