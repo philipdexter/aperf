@@ -3,7 +3,7 @@ name: "aperf"
 version: "0.1"
 maintainer: "Philip Dexter <philip.dexter@gmail.com>"
 authors: "Philip Dexter <philip.dexter@gmail.com>"
-homepage: "http://google.com"
+homepage: "http://github.com/philipdexter/aperf"
 build: [
   ["ocaml" "pkg/pkg.ml" "build" "--pinned" pinned ]
 ]
