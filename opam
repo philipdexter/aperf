@@ -11,6 +11,5 @@ depends: [
   "ocamlfind" {build}
   "ocamlbuild" {build}
   "topkg" {build}
-  "compiler-libs"
   "cmdliner"
 ]
