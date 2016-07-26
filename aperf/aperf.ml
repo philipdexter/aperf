@@ -118,7 +118,7 @@ let search_exp_mapper mapper e =
   let open Ast_mapper in
   match e.pexp_desc with
   | Pexp_for (p, start, bound, dir, body) ->
-    for_loops := ("hi" ^ (string_of_int e.pexp_loc.loc_start.pos_lnum)) :: !for_loops ;
+    for_loops := e :: !for_loops ;
     default_mapper.expr mapper e
   | x -> default_mapper.expr mapper e
 
@@ -338,6 +338,7 @@ let aperf eval build explore results_file perf_file =
 
   Printf.printf "> found %d for loops for perforation\n" (List.length !for_loops) ;
 
+  List.iter (fun e -> Format.pp_print_string fmt ">>\n" ; Pprintast.expression fmt e ; Format.pp_print_newline fmt ()) !for_loops ;
 
   try_perforation eval build explore results_file pstr'
 
