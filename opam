@@ -12,4 +12,5 @@ depends: [
   "ocamlbuild" {build}
   "compiler-libs.common" {build}
   "topkg" {build}
+  "cmdliner" {build}
 ]

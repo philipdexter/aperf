@@ -9,7 +9,6 @@ type config_result =
 }
 
 module type Config_run = sig
-
   (** num_loops -> config_run_function -> list of configs and their results *)
   val run : int -> (config -> config_result) -> (config * config_result) list
 end
@@ -64,7 +63,6 @@ module HillClimb : Config_run = struct
 
 
     (* start at best configs and hill climb *)
-
     let best_config_result = f (List.map fst (Array.to_list best)) in
 
     let rec hill_climb confs best_config_result step =
@@ -93,13 +91,6 @@ end
 
 let for_loops = ref []
 
-let input_files = ref []
-
-let eval_file = ref None
-let build_command = ref None
-let perfs = ref None
-let auto_explore = ref false
-let results_file = ref "results.data"
 let accuracy_bound = ref 2.
 
 let usage_msg =
@@ -251,8 +242,8 @@ let print_both (a, b) =
   print_endline "> stderr" ;
   List.iter print_endline b
 
-let try_perforation ast =
-  let results_out = open_out !results_file in
+let try_perforation eval_cmd build_cmd explore results_file ast =
+  let results_out = open_out results_file in
   Printf.fprintf results_out "# config path time accuracy\n" ;
 
   let num_loops = List.length !for_loops in
@@ -265,7 +256,6 @@ let try_perforation ast =
     let ast' =
       let open Ast_mapper in
       active_mapper.structure active_mapper ast in
-    (* Pprintast.structure Format.std_formatter ast' ; *)
     let fout = Filename.temp_file ~temp_dir:"./tmp/" "perf" ".ml" in
     let fout_native = String.sub fout 0 (String.length fout - 3) ^ ".native" in
     let fn = open_out fout in
@@ -275,12 +265,10 @@ let try_perforation ast =
     Printf.printf "> - %s -\n" fout ;
 
     print_endline "> building..." ;
-    print_both @@ (match !build_command with
-        | None -> run "ocamlfind" [| "ocamlopt" ; fout ; "-o" ; fout_native |]
-        | Some bc ->
-          (match Str.split (Str.regexp " ") bc with
-           | [] -> failwith ("error: bad command: " ^ bc)
-           | command :: args -> run command (Array.of_list (args @ [ fout ; fout_native])))) ;
+    print_both
+      (match Str.split (Str.regexp " ") build_cmd with
+       | [] -> failwith ("error: bad command: " ^ build_cmd)
+       | command :: args -> run command (Array.of_list (args @ [ fout ; fout_native]))) ;
 
     print_endline "> running..." ;
     let start_time = Unix.gettimeofday () in
@@ -289,19 +277,14 @@ let try_perforation ast =
     Printf.printf "> elapsed time: %f sec\n" total_time ;
 
     print_endline "> evaluating..." ;
-
-    let fitness = match !eval_file with
-      | None -> (Printf.printf "> no eval file, stopping here\n" ; 0.)
-      | Some file ->
-        begin
-          let fitness =
-            let stdout, stderr = run file [| fout_native |] in
-            match stdout with
-            | [fs] -> (try (abs_float (float_of_string fs)) with _ -> failwith (String.concat "" stdout))
-            | _ -> failwith (String.concat "" stdout) in
-          Printf.printf "> fitness: %f\n" fitness ;
-          fitness
-        end in
+    let fitness =
+      let fitness =
+        let stdout, stderr = run eval_cmd [| fout_native |] in
+        match stdout with
+        | [fs] -> (try (abs_float (float_of_string fs)) with _ -> failwith (String.concat "" stdout))
+        | _ -> failwith (String.concat "" stdout) in
+      Printf.printf "> fitness: %f\n" fitness ;
+      fitness in
 
     Printf.fprintf results_out "%s %s %f %f\n" (String.concat "-" (List.map string_of_float used_config)) fout_native total_time fitness ;
 
@@ -328,7 +311,7 @@ let try_perforation ast =
    * choose which config runner to use
    * right now it's either exhaustive search or hill climbing
    *)
-  let runner = if !auto_explore then (module HillClimb : Config_run) else (module Exhaustive) in
+  let runner = if explore then (module HillClimb : Config_run) else (module Exhaustive) in
 
   let best_config, best_config_result =
     let (module Runner) = runner in
@@ -341,50 +324,68 @@ let try_perforation ast =
 
   close_out results_out
 
-let set_eval_file s =
-  eval_file := Some s
 
-let set_build_command s =
-  build_command := Some s
+let aperf eval build explore results_file perf_file =
+  print_endline "input file:" ;
+  print_endline perf_file ;
 
-let set_perfs s =
-  perfs := Some (List.map float_of_string (Str.split (Str.regexp ",") s))
+  Location.input_name := perf_file ;
+  let fmt = Format.std_formatter in
+  let lexer = Lexing.from_channel (open_in perf_file) in
+  let pstr = Parse.implementation lexer in
 
-let anon_arg name =
-  if Filename.check_suffix name ".ml" then
-    input_files := name :: !input_files
-  else
-    failwith ("unsupported file "^name)
+  let pstr' = search_mapper.Ast_mapper.structure search_mapper pstr in
 
-let args =
-  let open Arg in
-  align [
-  "--eval", String set_eval_file, "set the eval file" ;
-  "--build", String set_build_command, "set the build command" ;
-  "--perfs", String set_perfs, "set the perforations" ;
-  "--explore", Set auto_explore, "set to auto explore possible perforations" ;
-  "--accuracy-bound", Set_float accuracy_bound, "set the accuracy bound in the scoring function" ;
-  "--results-file", Set_string results_file, "set the results data file" ;
-  ]
+  Printf.printf "> found %d for loops for perforation\n" (List.length !for_loops) ;
 
-let () =
-  Arg.parse args anon_arg usage_msg ;
-  print_endline "input files:" ;
-  List.iter print_endline !input_files ;
-  !input_files |> List.iter
-    (fun source ->
-       Location.input_name := source ;
-       let fmt = Format.std_formatter in
-       let lexer = Lexing.from_channel (open_in source) in
-       let pstr = Parse.implementation lexer in
 
-       (* Printast.implementation fmt pstr ; *)
+  try_perforation eval build explore results_file pstr'
 
-       let open Ast_mapper in
-       let pstr' = search_mapper.structure search_mapper pstr in
 
-       Printf.printf "> found %d for loops for perforation\n" (List.length !for_loops) ;
+open Cmdliner
 
-       try_perforation pstr' ;
+let aperf =
+  let version = "%%VERSION%%" in
 
-       Format.pp_print_newline fmt ())
+  (* options *)
+  (* TODO add accuracy bound argument *)
+  (* TODO expose tmp directory to use *)
+  let opt_eval =
+    let doc = "Run CMD to evaluate the fitness of each result" in
+    let docv = "CMD" in
+    Arg.(required & opt (some string) None & info ["E" ; "eval"] ~doc ~docv) in
+  let opt_build =
+    let doc = "Run CMD to build each configuration" in
+    let docv = "CMD" in
+    (* TODO make this only required if --explore is set *)
+    Arg.(required & opt (some string) None & info ["B" ; "build"] ~doc ~docv) in
+  let opt_results_file =
+    let doc = "Save results to FILE (defaults to results.data)" in
+    let docv = "FILE" in
+    Arg.(value & opt string "results.data" & info ["o" ; "results-file"] ~doc ~docv) in
+  let opt_explore =
+    let doc = "Explore the search space using a fitness function" in
+    Arg.(value & flag & info ["e" ; "explore"] ~doc) in
+  let file =
+    let doc = "Annotated OCaml source file" in
+    let docv = "FILE" in
+    Arg.(required & pos 0 (some string) None & info [] ~doc ~docv) in
+  let term = Term.(const aperf $ opt_eval $ opt_build $ opt_explore $ opt_results_file $ file) in
+
+  (* help page *)
+  let doc = "Perforation tools" in
+  let man =
+    [ `S "DESCRIPTION" ;
+      `P "$(b,$(mname)) tries to perforate loops in OCaml programs" ;
+      `S "AUTHOR" ;
+      `P "Philip Dexter, $(i,http://phfilip.com)" ;
+      `S "REPORTING BUGS" ;
+      `P "Report bugs on the GitHub project page %%PKG_HOMEPAGE%%" ;
+    ] in
+  let info = Term.info "aperf" ~version ~man ~doc in
+
+  (term, info)
+
+let () = match Term.eval aperf with
+  | `Error _ -> exit 1
+  | _ -> exit 0
