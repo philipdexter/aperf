@@ -1,4 +1,5 @@
-OCaml tools for loop perforation
+# aperf — OCaml tools for loop perforation
+%%VERSION%%
 
 
 # Examples
