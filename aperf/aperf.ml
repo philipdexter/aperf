@@ -135,7 +135,7 @@ let search_mapper =
                                         PStr [{ struc with
                                                 pstr_desc = Pstr_eval (search_exp_mapper mapper e, attributes) }]) }
         | { pexp_attributes = attr} ->
-          if List.exists (fun (a,_) -> String.equal "perforate" a.txt) attr then
+          if List.exists (fun (a,_) -> a.txt = "perforate") attr then
             search_exp_mapper mapper expr
           else
             default_mapper.expr mapper expr) }
