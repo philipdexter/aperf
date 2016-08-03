@@ -4,7 +4,7 @@ type config_result =
   { conf : config
   ; time : float
   ; speedup : float
-  ; accuracy : float
+  ; accuracy_loss : float
   ; score : float
 }
 
@@ -91,20 +91,21 @@ end
 
 let for_loops = ref []
 
-let accuracy_bound = ref 2.
-
 let usage_msg =
   Printf.sprintf
     "Usage: %s\n"
     Sys.argv.(0)
 
-let score_function speedup accuracy b = 2. /. ( (1. /. (speedup -. 1.)) +. (1. /. (1. -. (accuracy /. b))) )
+let score_function speedup accuracy_loss b =
+  if accuracy_loss >= b then 0.
+  else 2. /. ( (1. /. (speedup -. 1.)) +. (1. /. (1. -. (accuracy_loss /. b))) )
+
 
 let calc_speedup old_time new_time = old_time /. new_time
 
-let calc_speedup_accuracy_score old_time time fitness =
+let calc_speedup_accuracy_score old_time time fitness accuracy_loss_bound =
   let speedup = calc_speedup old_time time in
-  speedup, fitness, score_function speedup fitness !accuracy_bound
+  speedup, fitness, score_function speedup fitness accuracy_loss_bound
 
 let print_stats speedup accuracy score =
   Printf.printf "SPEEDUP %f\n" speedup ;
@@ -242,7 +243,7 @@ let print_both (a, b) =
   print_endline "> stderr" ;
   List.iter print_endline b
 
-let try_perforation eval_cmd build_cmd explore results_file ast =
+let try_perforation eval_cmd build_cmd explore accuracy_loss_bound results_file ast =
   let results_out = open_out results_file in
   Printf.fprintf results_out "# config path time accuracy\n" ;
 
@@ -303,9 +304,9 @@ let try_perforation eval_cmd build_cmd explore results_file ast =
   (* function to test each configuration with *)
   let test_config conf =
     let time, fitness = run_with_config (`Perforated (clamp_all conf)) in
-    let speedup, accuracy, score = calc_stats time fitness in
-    print_stats speedup accuracy score ;
-    { conf ; time ; speedup ; accuracy ; score } in
+    let speedup, accuracy_loss, score = calc_stats time fitness accuracy_loss_bound in
+    print_stats speedup accuracy_loss score ;
+    { conf ; time ; speedup ; accuracy_loss ; score } in
 
   (*
    * choose which config runner to use
@@ -325,7 +326,7 @@ let try_perforation eval_cmd build_cmd explore results_file ast =
   close_out results_out
 
 
-let aperf eval build explore results_file perf_file =
+let aperf eval build explore accuracy_loss_bound results_file perf_file =
   print_endline "input file:" ;
   print_endline perf_file ;
 
@@ -340,7 +341,7 @@ let aperf eval build explore results_file perf_file =
 
   List.iter (fun e -> Format.pp_print_string fmt ">>\n" ; Pprintast.expression fmt e ; Format.pp_print_newline fmt ()) !for_loops ;
 
-  try_perforation eval build explore results_file pstr'
+  try_perforation eval build explore accuracy_loss_bound results_file pstr'
 
 
 open Cmdliner
@@ -367,11 +368,15 @@ let aperf =
   let opt_explore =
     let doc = "Explore the search space using a fitness function" in
     Arg.(value & flag & info ["e" ; "explore"] ~doc) in
+  let opt_accuracy_loss_bound =
+    let doc = "Accept accuracy losses up to FLOAT (defaults to 0.30)" in
+    let docv = "FLOAT" in
+    Arg.(value & opt float 0.30 & info ["A" ; "accuracy_loss_bound"] ~doc ~docv) in
   let file =
     let doc = "Annotated OCaml source file" in
     let docv = "FILE" in
     Arg.(required & pos 0 (some string) None & info [] ~doc ~docv) in
-  let term = Term.(const aperf $ opt_eval $ opt_build $ opt_explore $ opt_results_file $ file) in
+  let term = Term.(const aperf $ opt_eval $ opt_build $ opt_explore $ opt_accuracy_loss_bound $ opt_results_file $ file) in
 
   (* help page *)
   let doc = "Perforation tools" in
