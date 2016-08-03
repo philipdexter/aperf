@@ -42,3 +42,7 @@ let rec mixups things solids =
     let rest = List.map (fun r -> s :: r) (mixups ts ss)
     in List.map (fun sel -> sel :: ss) t @ rest
   | _ -> failwith "mixups, lists must be of equal length"
+
+let rec find_and_extract f e = function
+  | [] -> None
+  | x :: xs -> if f x then Some (e x) else find_and_extract f e xs

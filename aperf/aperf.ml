@@ -100,7 +100,6 @@ let score_function speedup accuracy_loss b =
   if accuracy_loss >= b then 0.
   else 2. /. ( (1. /. (speedup -. 1.)) +. (1. /. (1. -. (accuracy_loss /. b))) )
 
-
 let calc_speedup old_time new_time = old_time /. new_time
 
 let calc_speedup_accuracy_score old_time time fitness accuracy_loss_bound =
@@ -136,14 +135,14 @@ let search_mapper =
                                         PStr [{ struc with
                                                 pstr_desc = Pstr_eval (search_exp_mapper mapper e, attributes) }]) }
         | { pexp_attributes = attr} ->
-          if List.exists (fun (a,_) -> a.txt = "perforate") attr then
+          if List.exists (fun (a,_) -> try String.sub a.txt 0 9 = "perforate" with Invalid_argument _ -> false) attr then
             search_exp_mapper mapper expr
           else
             default_mapper.expr mapper expr) }
 
 let active_config = ref []
 
-let active_exp_mapper mapper e =
+let active_exp_mapper note mapper e =
   let open Parsetree in
   let open Location in
   let open Ast_helper in
@@ -179,13 +178,20 @@ let active_exp_mapper mapper e =
                               (apply ":=" [ident used_var ; apply "+" [apply "!" [ident used_var] ; Exp.constant (Const.int 1)]]) None)
                            (Exp.let_ Asttypes.Nonrecursive [{ pvb_pat = Pat.var { txt = used_var ; loc = !default_loc } ; pvb_expr = ident "old_i" ; pvb_loc = !default_loc ; pvb_attributes = []}]
                               body))))))
-        else
+        else begin
           (* stop early *)
-          (Exp.for_ p
-             start
-             new_absolute_bound
-             dir
-             body)
+          let new_for =
+            (Exp.for_ p
+               start
+               new_absolute_bound
+               dir
+               body) in
+          if fst note then
+            Exp.sequence new_for
+              (apply ":=" [ident (snd note) ; Exp.constant (Const.float (string_of_float this_config))])
+          else
+            new_for
+        end
       end
       (* todo make sure the let i = !i -1 is changed to - 2 if necessary , could save old value *)
       (* todo every N skip M -> leads to accuracy *)
@@ -200,10 +206,16 @@ let active_mapper =
   { default_mapper with
     expr = (fun mapper expr ->
         match expr with
-        | { pexp_desc = Pexp_extension ({ txt = "perforate" }, PStr [{pstr_desc = Pstr_eval (e,attributes)}])} -> active_exp_mapper mapper e
+        (* is this first branch needed? *)
+        | { pexp_desc = Pexp_extension ({ txt = "perforate" }, PStr [{pstr_desc = Pstr_eval (e,attributes)}])} -> active_exp_mapper (false, "") mapper e
         | { pexp_attributes = attr} ->
-          if List.exists (fun (a,_) -> String.equal "perforate" a.txt) attr then
-            active_exp_mapper mapper expr
+          if List.exists (fun (a,_) -> try String.sub a.txt 0 9 = "perforate" with Invalid_argument _ -> false) attr then begin
+            let arg = match Util.find_and_extract (fun (a, _) -> a.txt = "perforatenote")
+                              (fun (_, PStr [{pstr_desc = Pstr_eval ({pexp_desc = Pexp_ident {txt = Longident.Lident exvar}},_)}]) -> exvar) attr with
+              | None -> (false, "")
+              | Some x -> (true, x) in
+            active_exp_mapper arg mapper expr
+          end
           else
             default_mapper.expr mapper expr) }
 
