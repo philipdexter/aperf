@@ -4,7 +4,7 @@ true: annot, bin_annot
 
 
 <aperf>: include
-<aperf/*>: package(compiler-libs.common), package(str), package(unix), package(cmdliner)
+<aperf/*>: package(compiler-libs.common), package(str), package(unix), package(cmdliner), package(ppx_tools.metaquot)
 
 <tmp>: -traverse
 <examples>: -traverse

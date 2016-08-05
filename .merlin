@@ -5,3 +5,4 @@ B _build/aperf
 PKG topkg
 PKG compiler-libs
 PKG cmdliner
+PKG ppx_tools.metaquot

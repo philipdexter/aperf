@@ -108,7 +108,7 @@ let calc_speedup_accuracy_score old_time time fitness accuracy_loss_bound =
 
 let print_stats speedup accuracy score =
   Printf.printf "SPEEDUP %f\n" speedup ;
-  Printf.printf "ACCURACY %f\n" accuracy ;
+  Printf.printf "ACCURACY LOSS %f\n" accuracy ;
   Printf.printf "SCORE %f\n" score
 
 let search_exp_mapper mapper e =
@@ -116,8 +116,12 @@ let search_exp_mapper mapper e =
   let open Location in
   let open Lexing in
   let open Ast_mapper in
-  match e.pexp_desc with
-  | Pexp_for (p, start, bound, dir, body) ->
+  let save_it e = for_loops := e :: !for_loops in
+  match e with
+  | [%expr Aperf.array_iter_approx [%e? f] [%e? l]] ->
+    save_it e ;
+    default_mapper.expr mapper e
+  | [%expr for [%p? _] = [%e? start] to [%e? bound] do [%e? body] done] ->
     for_loops := e :: !for_loops ;
     default_mapper.expr mapper e
   | x -> default_mapper.expr mapper e
@@ -129,6 +133,7 @@ let search_mapper =
   { default_mapper with
     expr = (fun mapper expr ->
         match expr with
+        | [%expr Aperf.array_iter_approx [%e? f] [%e? l]] -> search_exp_mapper mapper expr
         | { pexp_desc = Pexp_extension ({ txt = "perforate" } as loc, PStr [{pstr_desc = Pstr_eval (e,attributes)} as struc])} ->
           { expr with
             pexp_desc = Pexp_extension (loc,
@@ -142,53 +147,80 @@ let search_mapper =
 
 let active_config = ref []
 
+let list_iter_approx : ('a -> unit) -> 'a list -> unit = fun _ _ -> failwith "you must use 'aperf' if you want to approximate"
+let array_iter_approx : ('a -> unit) -> 'a array -> unit = fun _ _ -> failwith "you must use 'aperf' if you want to approximate"
+
 let active_exp_mapper note mapper e =
   let open Parsetree in
   let open Location in
   let open Ast_helper in
   let open Ast_mapper in
-  match e.pexp_desc with
-  | Pexp_for (p, start, bound, dir, body) ->
+  (* TODO add stubs for list.iter_approx *)
+  match e with
+  | [%expr Aperf.array_iter_approx [%e? f] [%e? l]] ->
     let this_config = List.hd !active_config in
     active_config := List.tl !active_config ;
     let do_perforation = this_config <> 1. in
     if do_perforation then
       begin
-        let used_var = match p with { ppat_desc = Ppat_var { txt = var } } -> var | _ -> assert false in
+        (* don't need ident probably, can use metaquot *)
         let ident i = Exp.ident { txt = Longident.Lident i ; loc = !default_loc } in
-        let apply func args = Exp.apply (ident func) (List.map (fun e -> Asttypes.Nolabel, e) args) in
         let perforation = this_config in
-        let this_of_that_of_expr this that expr = apply (this^"_of_"^that) [expr] in
-        let float_of_int_of_expr = this_of_that_of_expr "float" "int" in
-        let int_of_float_of_expr = this_of_that_of_expr "int" "float" in
-        let bound_minus_start = apply "-" [bound ; start] in
-        let new_relative_bound = int_of_float_of_expr @@ apply "*." [float_of_int_of_expr  bound_minus_start ; Exp.constant (Const.float (string_of_float perforation)) ] in
-        let new_absolute_bound = apply "+" [start ; new_relative_bound] in
-        let skip_every = apply "/." [float_of_int_of_expr bound_minus_start ; apply "-." [float_of_int_of_expr bound_minus_start ; apply "*." [float_of_int_of_expr bound_minus_start ; Exp.constant (Const.float (string_of_float perforation))]]] in
-        if perforation > 0.5 then
+        let bound = [%expr Array.length [%e l]] in
+        let new_relative_bound = [%expr int_of_float (float_of_int [%e bound] *. [%e Exp.constant (Const.float (string_of_float perforation))])] in
+        let new_absolute_bound = [%expr [%e new_relative_bound]] in
+        let to_note = if fst note then [%expr [%e ident (snd note)] := [%e (Exp.constant (Const.float (string_of_float this_config)))]] else [%expr () ] in
+        (* allow just a @perforatedvar variable
+           like let perf = ref 1.0 [@perfvar] *)
+        [%expr
+          let aperf_break_counter = ref 0 in
+          let aperf_end = [%e new_absolute_bound] in
+          (* support list iter as well *)
+          (try Array.iter (fun a ->
+               if !aperf_break_counter >= aperf_end then failwith ""
+               else (aperf_break_counter := !aperf_break_counter + 1 ;
+                     [%e f] a)) [%e l]
+           with _ -> ()) ;
+          [%e to_note]
+        ]
+      end
+    else
+      default_mapper.expr mapper [%expr Array.iter [%e f] [%e l]]
+  | [%expr for [%p? p] = [%e? start] to [%e? bound] do [%e? body] done] ->
+    let this_config = List.hd !active_config in
+    active_config := List.tl !active_config ;
+    let do_perforation = this_config <> 1. in
+    if do_perforation then
+      begin
+        let ident i = Exp.ident { txt = Longident.Lident i ; loc = !default_loc } in
+        let perforation = this_config in
+        let new_relative_bound = [%expr int_of_float (float_of_int ([%e bound] - [%e start]) *. [%e Exp.constant (Const.float (string_of_float perforation))])] in
+        let new_absolute_bound = [%expr [%e start] + [%e new_relative_bound]] in
+        (* let skip_every = apply "/." [float_of_int_of_expr bound_minus_start ; apply "-." [float_of_int_of_expr bound_minus_start ; apply "*." [float_of_int_of_expr bound_minus_start ; Exp.constant (Const.float (string_of_float perforation))]]] in *)
+        (* temporarily turn off skipping of elements *)
+        if false then
+          failwith "false"
+        (* if perforation > 0.5 then *)
           (* skip elements *)
-          mapper.expr mapper
-            (Exp.let_ Asttypes.Nonrecursive [{ pvb_pat = Pat.var { txt = used_var ; loc = !default_loc }  ; pvb_expr = apply "ref" [start] ; pvb_loc = !default_loc ; pvb_attributes = []}]
-               (Exp.while_ (apply "<" [ apply "!" [ident used_var] ; bound])
-                  (Exp.let_ Asttypes.Nonrecursive [{ pvb_pat = Pat.var { txt = "old_i" ; loc = !default_loc } ; pvb_expr = apply "!" [ident used_var] ; pvb_loc = !default_loc ; pvb_attributes = []}]
-                     (Exp.sequence
-                        (apply ":=" [ident used_var ; apply "+" [apply "!" [ident used_var] ; Exp.constant (Const.int 1)]])
-                        (Exp.sequence
-                           (Exp.ifthenelse (apply "=" [apply "mod" [apply "!" [ident used_var] ; int_of_float_of_expr (apply "+." [skip_every ; Exp.constant (Const.float (string_of_float 0.5))])] ; Exp.constant (Const.int 0)])
-                              (apply ":=" [ident used_var ; apply "+" [apply "!" [ident used_var] ; Exp.constant (Const.int 1)]]) None)
-                           (Exp.let_ Asttypes.Nonrecursive [{ pvb_pat = Pat.var { txt = used_var ; loc = !default_loc } ; pvb_expr = ident "old_i" ; pvb_loc = !default_loc ; pvb_attributes = []}]
-                              body))))))
+          (* mapper.expr mapper *)
+          (*   (Exp.let_ Asttypes.Nonrecursive [{ pvb_pat = Pat.var { txt = used_var ; loc = !default_loc }  ; pvb_expr = apply "ref" [start] ; pvb_loc = !default_loc ; pvb_attributes = []}] *)
+          (*      (Exp.while_ (apply "<" [ apply "!" [ident used_var] ; bound]) *)
+          (*         (Exp.let_ Asttypes.Nonrecursive [{ pvb_pat = Pat.var { txt = "old_i" ; loc = !default_loc } ; pvb_expr = apply "!" [ident used_var] ; pvb_loc = !default_loc ; pvb_attributes = []}] *)
+          (*            (Exp.sequence *)
+          (*               (apply ":=" [ident used_var ; apply "+" [apply "!" [ident used_var] ; Exp.constant (Const.int 1)]]) *)
+          (*               (Exp.sequence *)
+          (*                  (Exp.ifthenelse (apply "=" [apply "mod" [apply "!" [ident used_var] ; int_of_float_of_expr (apply "+." [skip_every ; Exp.constant (Const.float (string_of_float 0.5))])] ; Exp.constant (Const.int 0)]) *)
+          (*                     (apply ":=" [ident used_var ; apply "+" [apply "!" [ident used_var] ; Exp.constant (Const.int 1)]]) None) *)
+          (*                  (Exp.let_ Asttypes.Nonrecursive [{ pvb_pat = Pat.var { txt = used_var ; loc = !default_loc } ; pvb_expr = ident "old_i" ; pvb_loc = !default_loc ; pvb_attributes = []}] *)
+          (*                     body)))))) *)
         else begin
           (* stop early *)
-          let new_for =
-            (Exp.for_ p
-               start
-               new_absolute_bound
-               dir
-               body) in
+          let new_for = [%expr
+            for [%p p] = [%e start] to [%e new_absolute_bound] do
+              [%e body]
+            done ] in
           if fst note then
-            Exp.sequence new_for
-              (apply ":=" [ident (snd note) ; Exp.constant (Const.float (string_of_float this_config))])
+            [%expr [%e new_for] ; [%e ident (snd note)] := [%e (Exp.constant (Const.float (string_of_float this_config)))]]
           else
             new_for
         end
@@ -206,7 +238,7 @@ let active_mapper =
   { default_mapper with
     expr = (fun mapper expr ->
         match expr with
-        (* is this first branch needed? *)
+        (* is this branch needed? maybe add failwith to test if ever fired *)
         | { pexp_desc = Pexp_extension ({ txt = "perforate" }, PStr [{pstr_desc = Pstr_eval (e,attributes)}])} -> active_exp_mapper (false, "") mapper e
         | { pexp_attributes = attr} ->
           if List.exists (fun (a,_) -> try String.sub a.txt 0 9 = "perforate" with Invalid_argument _ -> false) attr then begin
@@ -217,7 +249,8 @@ let active_mapper =
             active_exp_mapper arg mapper expr
           end
           else
-            default_mapper.expr mapper expr) }
+            default_mapper.expr mapper expr
+        | [%expr Aperf.array_iter_approx [%e? f] [%e? p]] -> active_exp_mapper (false, "") mapper expr) }
 
 let run command args =
   let (pr0, pw0) = Unix.pipe () in
