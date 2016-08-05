@@ -1,0 +1,14 @@
+*.byte
+*.native
+*.o
+*.cmi
+*.cmo
+*.cmx
+*.in
+*.out
+*.data
+*.png
+
+_tags
+tmp
+venv

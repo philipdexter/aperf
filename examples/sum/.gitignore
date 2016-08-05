@@ -1,0 +1,7 @@
+input.*
+tmp
+*.in
+*.out
+venv
+*.png
+*.results
