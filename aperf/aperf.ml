@@ -147,8 +147,8 @@ let search_mapper =
 
 let active_config = ref []
 
-let list_iter_approx : ('a -> unit) -> 'a list -> unit = fun _ _ -> failwith "you must use 'aperf' if you want to approximate"
-let array_iter_approx : ('a -> unit) -> 'a array -> unit = fun _ _ -> failwith "you must use 'aperf' if you want to approximate"
+let list_iter_approx = fun _ _ -> failwith "you must use 'aperf' if you want to approximate"
+let array_iter_approx = fun _ _ -> failwith "you must use 'aperf' if you want to approximate"
 
 let active_exp_mapper note mapper e =
   let open Parsetree in
@@ -170,7 +170,9 @@ let active_exp_mapper note mapper e =
         let new_relative_bound = [%expr int_of_float (float_of_int [%e bound] *. [%e Exp.constant (Const.float (string_of_float perforation))])] in
         let new_absolute_bound = [%expr [%e new_relative_bound]] in
         let to_note = if fst note then [%expr [%e ident (snd note)] := [%e (Exp.constant (Const.float (string_of_float this_config)))]] else [%expr () ] in
-        (* allow just a @perforatedvar variable
+        (* TODO allow to run the computations multiple times *)
+        (* TODO make the function array_iter_approx a cousin where it saves the approximation level like array_iter_approx_and_save *)
+        (* TODO allow just a @perforatedvar variable
            like let perf = ref 1.0 [@perfvar] *)
         [%expr
           let aperf_break_counter = ref 0 in

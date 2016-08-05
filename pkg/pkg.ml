@@ -5,5 +5,7 @@ open Topkg
 
 let () =
   Pkg.describe "aperf" @@ fun c->
-  Ok [Pkg.bin "aperf/aperf"]
+  Ok [ Pkg.bin "aperf/aperf"
+     ; Pkg.lib "pkg/META"
+     ; Pkg.mllib ~api:["Aperf"] "aperf/aperf.mllib" ]
 
