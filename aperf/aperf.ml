@@ -130,8 +130,10 @@ let try_perforation eval_cmd build_cmd explore accuracy_loss_bound results_file 
     Runner.run num_loops test_config |>
     Util.max_by_1 (fun (_,c) -> c.Config_run.score) in
 
-  Printf.printf "best improvement : %s - %f"
+  Printf.printf "best improvement : config %s - speedup %f - accuracy loss %f - score %f"
     (String.concat " " (List.map string_of_float best_config))
+    best_config_result.Config_run.speedup
+    best_config_result.Config_run.accuracy_loss
     best_config_result.Config_run.score ;
 
   close_out results_out
