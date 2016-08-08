@@ -1,9 +1,4 @@
 
-let usage_msg =
-  Printf.sprintf
-    "Usage: %s\n"
-    Sys.argv.(0)
-
 let score_function speedup accuracy_loss b =
   if accuracy_loss >= b then 0.
   else 2. /. ( (1. /. (speedup -. 1.)) +. (1. /. (1. -. (accuracy_loss /. b))) )
