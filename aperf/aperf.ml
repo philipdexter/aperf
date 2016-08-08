@@ -1,3 +1,4 @@
+let repeat_runs = 10
 
 let score_function speedup accuracy_loss b =
   if accuracy_loss >= b then 0.
@@ -78,12 +79,25 @@ let try_perforation eval_cmd build_cmd explore accuracy_loss_bound results_file 
        | [] -> failwith ("error: bad command: " ^ build_cmd)
        | command :: args -> run command (Array.of_list (args @ [ fout ; fout_native]))) ;
 
-    print_endline "> running..." ;
-    let start_time = Unix.gettimeofday () in
-    ignore @@ run fout_native [||] ;
-    let total_time = Unix.gettimeofday () -. start_time in
-    Printf.printf "> elapsed time: %f sec\n" total_time ;
+    print_endline "> running 10 times..." ;
 
+    let run_once () =
+      let start_time = Unix.gettimeofday () in
+      ignore @@ run fout_native [||] ;
+      let total_time = Unix.gettimeofday () -. start_time in
+      Printf.printf "> elapsed time: %f sec\n" total_time ;
+      total_time in
+
+    (* run the program repeat_runs (10) times to get an average run time *)
+    let all_times = List.map run_once (Util.replicate () repeat_runs) in
+    let total_time =
+      let len = repeat_runs in
+      let sum = List.fold_left (+.) 0. all_times in
+      sum /. (float_of_int len) in
+
+
+    (* we assume that the run will always yield the same fitness, therefore we only
+       evaluate it once *)
     print_endline "> evaluating..." ;
     let fitness =
       let fitness =
