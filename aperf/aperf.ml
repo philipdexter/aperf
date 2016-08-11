@@ -56,7 +56,7 @@ let print_both (a, b) =
 
 let try_perforation eval_cmd build_cmd explore accuracy_loss_bound results_file ast pps =
   let results_out = open_out results_file in
-  Printf.fprintf results_out "# config path time accuracy\n" ;
+  Printf.fprintf results_out "# config path time accuracy_loss\n" ;
 
   let num_loops = List.length pps in
 
@@ -144,7 +144,7 @@ let try_perforation eval_cmd build_cmd explore accuracy_loss_bound results_file 
     Runner.run num_loops test_config |>
     Util.max_by_1 (fun (_,c) -> c.Config_run.score) in
 
-  Printf.printf "best improvement : config %s - speedup %f - accuracy loss %f - score %f"
+  Printf.printf "best improvement : config %s - speedup %f - accuracy loss %f - score %f\n"
     (String.concat " " (List.map string_of_float best_config))
     best_config_result.Config_run.speedup
     best_config_result.Config_run.accuracy_loss
