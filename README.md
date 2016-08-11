@@ -1,6 +1,4 @@
 # aperf — OCaml tools for loop perforation
-%%VERSION%%
-
 
 # Examples
 

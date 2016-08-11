@@ -174,7 +174,7 @@ let aperf eval build explore accuracy_loss_bound results_file perf_file =
 open Cmdliner
 
 let aperf =
-  let version = "%%VERSION%%" in
+  let version = "0.1.2" in
 
   (* options *)
   (* TODO add accuracy bound argument *)
