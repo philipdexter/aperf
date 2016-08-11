@@ -20,7 +20,7 @@ let out_centroids fout centroids =
 
 let () =
   let fout = open_out "kmeans.out" in
-  for i = 1 to 10 do
+  for i = 1 to 30 do
     let file = "inputs/"^(string_of_int i)^".in" in
     let points = read_points file in
     let centroids, _ = Kmeans.run points 15 10 in
