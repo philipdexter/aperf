@@ -13,5 +13,5 @@ depends: [
   "ocamlbuild" {build}
   "topkg" {build}
   "cmdliner"
-  "ppx_tools.metaquot"
+  "ppx_tools"
 ]
