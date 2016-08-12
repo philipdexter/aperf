@@ -1,3 +1,5 @@
 description="OCaml tools for loop perforation"
 version = "0.1.2"
-requires = "cmdliner ppx_tools.metaquot"
+requires = "cmdliner ppx_tools.metaquot unix"
+archive(byte) = "aperf.cma"
+archive(native) = "aperf.cmxa"
