@@ -16,3 +16,5 @@ module Exhaustive : T
 
 module HillClimb : T
 
+(** time_without_perforation -> new_time -> fitness -> accuracy_loss_bound -> speedup * accuracy_loss * score *)
+val calc_speedup_accuracy_score : float -> float -> float -> float -> float * float * float

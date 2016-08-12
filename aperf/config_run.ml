@@ -87,3 +87,13 @@ module HillClimb : T = struct
 
     [hill_climb (Array.to_list (Array.map fst best)) best_config_result 0.1]
 end
+
+let score_function speedup accuracy_loss b =
+  if accuracy_loss >= b then 0.
+  else 2. /. ( (1. /. (speedup -. 1.)) +. (1. /. (1. -. (accuracy_loss /. b))) )
+
+let calc_speedup old_time new_time = old_time /. new_time
+
+let calc_speedup_accuracy_score old_time time fitness accuracy_loss_bound =
+  let speedup = calc_speedup old_time time in
+  speedup, fitness, score_function speedup fitness accuracy_loss_bound

@@ -46,3 +46,33 @@ let rec mixups things solids =
 let rec find_and_extract f e = function
   | [] -> None
   | x :: xs -> if f x then Some (e x) else find_and_extract f e xs
+
+let run command args =
+  let (pr0, pw0) = Unix.pipe () in
+  let (pr1, pw1) = Unix.pipe () in
+  let (pr2, pw2) = Unix.pipe () in
+  let _pid = Unix.create_process command (Array.append [| command |] args) pr0 pw1 pw2 in
+  Unix.close pw0 ;
+  Unix.close pr0 ;
+  Unix.close pw1 ;
+  Unix.close pw2 ;
+  let echo_out = Unix.in_channel_of_descr pr1 in
+  let echo_stderr = Unix.in_channel_of_descr pr2 in
+  let stdout_lines = ref [] in
+  (try
+     while true do
+       stdout_lines := input_line echo_out :: !stdout_lines
+     done
+   with
+     End_of_file -> close_in echo_out) ;
+  let stderr_lines = ref [] in
+  (try
+     while true do
+       stderr_lines := input_line echo_stderr :: !stderr_lines
+     done
+   with
+     End_of_file -> close_in echo_stderr) ;
+
+  ignore @@ Unix.waitpid [] _pid ;
+
+  List.rev !stdout_lines, List.rev !stderr_lines

@@ -1,60 +1,9 @@
-let repeat_runs = 10
-
-let score_function speedup accuracy_loss b =
-  if accuracy_loss >= b then 0.
-  else 2. /. ( (1. /. (speedup -. 1.)) +. (1. /. (1. -. (accuracy_loss /. b))) )
-
-let calc_speedup old_time new_time = old_time /. new_time
-
-let calc_speedup_accuracy_score old_time time fitness accuracy_loss_bound =
-  let speedup = calc_speedup old_time time in
-  speedup, fitness, score_function speedup fitness accuracy_loss_bound
-
-let print_stats speedup accuracy score =
-  Printf.printf "SPEEDUP %f\n" speedup ;
-  Printf.printf "ACCURACY LOSS %f\n" accuracy ;
-  Printf.printf "SCORE %f\n" score
-
 let list_iter_approx = fun _ _ -> failwith "you must use 'aperf' if you want to approximate"
 let array_iter_approx = fun _ _ -> failwith "you must use 'aperf' if you want to approximate"
 
-let run command args =
-  let (pr0, pw0) = Unix.pipe () in
-  let (pr1, pw1) = Unix.pipe () in
-  let (pr2, pw2) = Unix.pipe () in
-  let _pid = Unix.create_process command (Array.append [| command |] args) pr0 pw1 pw2 in
-  Unix.close pw0 ;
-  Unix.close pr0 ;
-  Unix.close pw1 ;
-  Unix.close pw2 ;
-  let echo_out = Unix.in_channel_of_descr pr1 in
-  let echo_stderr = Unix.in_channel_of_descr pr2 in
-  let stdout_lines = ref [] in
-  (try
-     while true do
-       stdout_lines := input_line echo_out :: !stdout_lines
-     done
-   with
-     End_of_file -> close_in echo_out) ;
-  let stderr_lines = ref [] in
-  (try
-     while true do
-       stderr_lines := input_line echo_stderr :: !stderr_lines
-     done
-   with
-     End_of_file -> close_in echo_stderr) ;
-
-  ignore @@ Unix.waitpid [] _pid ;
-
-  List.rev !stdout_lines, List.rev !stderr_lines
-
-let print_both (a, b) =
-  print_endline "> stdout" ;
-  List.iter print_endline a ;
-  print_endline "> stderr" ;
-  List.iter print_endline b
-
 let try_perforation eval_cmd build_cmd explore accuracy_loss_bound results_file ast pps =
+  let repeat_runs = 10 in
+
   let results_out = open_out results_file in
   Printf.fprintf results_out "# config path time accuracy_loss\n" ;
 
@@ -74,16 +23,20 @@ let try_perforation eval_cmd build_cmd explore accuracy_loss_bound results_file 
     Printf.printf "> - %s -\n" fout ;
 
     print_endline "> building..." ;
-    print_both
-      (match Str.split (Str.regexp " ") build_cmd with
-       | [] -> failwith ("error: bad command: " ^ build_cmd)
-       | command :: args -> run command (Array.of_list (args @ [ fout ; fout_native]))) ;
+    (match Str.split (Str.regexp " ") build_cmd with
+     | [] -> failwith ("error: bad command: " ^ build_cmd)
+     | command :: args -> Util.run command (Array.of_list (args @ [ fout ; fout_native])))
+    |> (fun (stdout, stderr) ->
+        print_endline "> stdout" ;
+        List.iter print_endline stdout ;
+        print_endline "> stderr" ;
+        List.iter print_endline stderr) ;
 
     print_endline "> running 10 times..." ;
 
     let run_once () =
       let start_time = Unix.gettimeofday () in
-      ignore @@ run fout_native [||] ;
+      ignore @@ Util.run fout_native [||] ;
       let total_time = Unix.gettimeofday () -. start_time in
       Printf.printf "> elapsed time: %f sec\n" total_time ;
       total_time in
@@ -101,7 +54,7 @@ let try_perforation eval_cmd build_cmd explore accuracy_loss_bound results_file 
     print_endline "> evaluating..." ;
     let fitness =
       let fitness =
-        let stdout, stderr = run eval_cmd [| fout_native |] in
+        let stdout, stderr = Util.run eval_cmd [| fout_native |] in
         match stdout with
         | [fs] -> (try (abs_float (float_of_string fs)) with _ -> failwith (String.concat "" stdout))
         | _ -> failwith (String.concat "" stdout) in
@@ -117,7 +70,7 @@ let try_perforation eval_cmd build_cmd explore accuracy_loss_bound results_file 
   let noperf_time, noperf_fitness = run_with_config `Normal in
 
   (* helper function to calculate stats based on baseline *)
-  let calc_stats = calc_speedup_accuracy_score noperf_time in
+  let calc_stats = Config_run.calc_speedup_accuracy_score noperf_time in
 
   (* we never want to run a configuration below 0 or above 1 *)
   let clamp_all = List.map (Util.clamp 0.0 1.0) in
@@ -126,7 +79,11 @@ let try_perforation eval_cmd build_cmd explore accuracy_loss_bound results_file 
   let test_config conf =
     let time, fitness = run_with_config (`Perforated (clamp_all conf)) in
     let speedup, accuracy_loss, score = calc_stats time fitness accuracy_loss_bound in
-    print_stats speedup accuracy_loss score ;
+
+    Printf.printf "SPEEDUP %f\n" speedup ;
+    Printf.printf "ACCURACY LOSS %f\n" accuracy_loss ;
+    Printf.printf "SCORE %f\n" score ;
+
     { Config_run.conf
     ; Config_run.time
     ; Config_run.speedup
